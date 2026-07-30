@@ -1,0 +1,23 @@
+# 개인 기록 (제출 제외)
+vault/
+
+# Obsidian 로컬 설정 (저장소 루트가 vault로 열려 있음)
+.obsidian/
+
+# 과제 원본 PDF — ROBOE 소유, 저장소에 포함하지 않음 (유출 금지 조항)
+TakeHomeTask_*.pdf
+
+# 데이터셋 (재생성 가능 — sdg/generate_dataset.py)
+data/
+
+# 학습 산출물 캐시 (최종 가중치는 models/에 커밋)
+training/runs/
+training/.venv/
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# 기타
+.DS_Store
