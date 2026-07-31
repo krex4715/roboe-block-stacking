@@ -111,11 +111,20 @@ def main():
             if step > done_at + 150:
                 break
         if step % 1000 == 0 and step:
-            # 막혔을 때 '어디서' 막혔는지 알려면 의사결정 스택이 필요하다
+            # 막혔을 때 '어디서' 막혔는지 알려면 의사결정 스택 + 세계 상태가 필요하다
             stack = " > ".join(str(e) for e in sample.decider_network._decider_state.stack)
             print(f"[run] {step} 스텝... 탑 높이={ctx.block_tower.height} "
-                  f"| {sample.bridge.summary()}\n      결정스택: {stack}\n"
-                  f"      진단: {getattr(ctx, 'diagnostics_message', '')[:200]}", flush=True)
+                  f"| {sample.bridge.summary()}\n      결정스택: {stack}", flush=True)
+            for name in ["RedCube", "YellowCube", "GreenCube", "BlueCube"]:
+                g = np.asarray(sample.belief_cubes[name].get_world_pose()[0]) if sample.belief_cubes else None
+                r = np.asarray(sample.cubes[name].get_world_pose()[0])
+                reason = sample.bridge.last_reasons.get(name, "-")
+                cls = {"RedCube": "red_cube", "YellowCube": "yellow_cube",
+                       "GreenCube": "green_cube", "BlueCube": "blue_cube"}[name]
+                est = sample.last_estimates.get(cls)
+                print(f"        {name:11s} ghost={np.round(g,3) if g is not None else '-'} "
+                      f"real={np.round(r,3)} est={np.round(est,3) if est is not None else '없음'} "
+                      f"| {reason}", flush=True)
 
     elapsed = time.time() - t0
     print(f"\n[bridge] {sample.bridge.summary()}")
