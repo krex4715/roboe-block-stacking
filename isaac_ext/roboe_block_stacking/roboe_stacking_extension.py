@@ -50,7 +50,7 @@ class RoboeBlockStackingExtension(omni.ext.IExt):
         }
 
         ui_handle = RoboeBlockStackingUI(**ui_kwargs)
-        ui_handle.sample = RoboeBlockStacking(ui_handle.on_diagnostics)
+        ui_handle.sample = RoboeBlockStacking(ui_handle.on_diagnostics, ui_handle.on_perception)
 
         get_browser_instance().register_example(
             name=self.example_name,
@@ -88,6 +88,13 @@ class RoboeBlockStackingUI(BaseSampleUITemplate):
                     "Tower Y (m)", default_val=float(DEFAULT_TOWER_POSITION[1]),
                     tooltip="적재 목표 위치 Y",
                 )
+                # [ROBOE] 인식 On/Off. 끄면 로봇이 시뮬레이터 ground truth 로 동작하므로
+                # "인식이 실제로 일하고 있는가"를 눈으로 비교할 수 있다.
+                cb_builder(
+                    label="Perception (AI)", default_val=True,
+                    tooltip="ZED-X + YOLO 인식 실행. 끄면 ground truth 사용",
+                    on_clicked_fn=self._on_perception_toggled,
+                )
                 dict = {
                     "label": "Load World",
                     "type": "button",
@@ -124,12 +131,24 @@ class RoboeBlockStackingUI(BaseSampleUITemplate):
             ):
                 self.build_task_controls_ui()
 
+            # [ROBOE] 인식 결과 패널 - 검출 개수/점수/추정 3D 위치/추론 지연을 실시간 표시
+            with ui.CollapsableFrame(
+                title="Perception (ZED-X + YOLO)",
+                width=ui.Fraction(0.33),
+                height=0,
+                visible=True,
+                collapsed=False,
+                horizontal_scrollbar_policy=ui.ScrollBarPolicy.SCROLLBAR_AS_NEEDED,
+                vertical_scrollbar_policy=ui.ScrollBarPolicy.SCROLLBAR_AS_NEEDED,
+            ):
+                self.build_perception_ui()
+
             with ui.CollapsableFrame(
                 title="Diagnostic",
                 width=ui.Fraction(0.33),
                 height=0,
                 visible=True,
-                collapsed=False,
+                collapsed=True,
                 horizontal_scrollbar_policy=ui.ScrollBarPolicy.SCROLLBAR_AS_NEEDED,
                 vertical_scrollbar_policy=ui.ScrollBarPolicy.SCROLLBAR_ALWAYS_ON,
             ):
@@ -196,6 +215,23 @@ class RoboeBlockStackingUI(BaseSampleUITemplate):
             }
             self.task_ui_elements["Start"] = btn_builder(**dict)
             self.task_ui_elements["Start"].enabled = False
+
+    def build_perception_ui(self):
+        with ui.VStack(spacing=5):
+            ui.Label("인식 결과 (클래스 / 점수 / 추정 3D 위치)", height=20)
+            self.perception_model = ui.SimpleStringModel(
+                "LOAD 를 누르면 검출기를 로드합니다.\n"
+                "Start 후 뷰포트에 인식 위치가 점으로 표시됩니다."
+            )
+            ui.StringField(self.perception_model, multiline=True, height=150, read_only=True)
+
+    def on_perception(self, text):
+        if hasattr(self, "perception_model"):
+            self.perception_model.set_value(text)
+
+    def _on_perception_toggled(self, value):
+        if self._sample is not None:
+            self._sample.set_perception_enabled(bool(value))
 
     def build_diagnostic_ui(self):
         with ui.VStack(spacing=5):
