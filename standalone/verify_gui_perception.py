@@ -72,14 +72,46 @@ def main():
     if messages:
         print("    UI 패널 내용:\n      " + messages[-1].replace("\n", "\n      "))
 
-    print("\n[4] 인식 OFF 토글")
+    n_estimates = len(sample.last_estimates)
+
+    print("\n[4] 보정 모드 전환 - 뷰포트의 점이 실제로 움직이는가")
+    import numpy as np
+
+    cube_of = {"red_cube": "RedCube", "yellow_cube": "YellowCube",
+               "green_cube": "GreenCube", "blue_cube": "BlueCube"}
+    by_mode = {}
+    for mode in ("none", "ray", "box"):
+        sample.set_correction_mode(mode)
+        sample._run_perception()
+        errs = []
+        for cls, p in sample.last_estimates.items():
+            obj = world.scene.get_object(cube_of[cls])
+            gt = np.asarray(obj.get_world_pose()[0], dtype=float)
+            errs.append(float(np.linalg.norm(p - gt)) * 1000)
+        by_mode[mode] = (dict(sample.last_estimates), float(np.mean(errs)) if errs else float("nan"))
+        print(f"    {mode:5s}: 평균 오차 {by_mode[mode][1]:5.1f}mm  (검출 {len(errs)}개)")
+
+    # none 과 box 의 점이 실제로 다른 위치여야 한다 (같으면 보정이 안 걸린 것)
+    shift = 0.0
+    if by_mode["none"][0] and by_mode["box"][0]:
+        common = set(by_mode["none"][0]) & set(by_mode["box"][0])
+        if common:
+            shift = float(np.mean([np.linalg.norm(by_mode["none"][0][c] - by_mode["box"][0][c])
+                                   for c in common])) * 1000
+    print(f"    none <-> box 점 이동량: {shift:.1f}mm  (기대: ~26mm 이상)")
+
+    sample.set_correction_mode("box")
+
+    print("\n[5] 인식 OFF 토글")
     sample.set_perception_enabled(False)
     for _ in range(60):
         world.step(render=True)
     print(f"    OFF 후 UI: {messages[-1][:60]}")
 
-    ok = len(sample.last_estimates) == 4
-    print(f"\nGUI_PERCEPTION: {'PASS' if ok else 'FAIL'} (기준: 큐브 4개 모두 추정)")
+    ok = (n_estimates == 4 and shift > 20.0
+          and by_mode["box"][1] < by_mode["ray"][1] < by_mode["none"][1])
+    print(f"\nGUI_PERCEPTION: {'PASS' if ok else 'FAIL'} "
+          f"(기준: 큐브 4개 추정 + 보정 전환이 점을 20mm 이상 이동 + box<ray<none)")
 
 
 try:

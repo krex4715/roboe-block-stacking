@@ -81,6 +81,9 @@ class RoboeBlockStacking(CortexBase):
         self.last_estimates = {}       # {클래스: 추정 3D 위치}
         self._perception_step = 0
         self._debug_draw = None
+        # [ROBOE] 깊이->중심 보정 방식. UI에서 바꾸면 뷰포트의 점이 실제로 움직인다.
+        # "none" 으로 두면 점이 큐브보다 ~3cm 카메라 쪽으로 앞서 찍히는 것을 눈으로 볼 수 있다.
+        self.correction_mode = "box"
 
     def setup_scene(self):
         world = self.get_world()
@@ -199,7 +202,9 @@ class RoboeBlockStacking(CortexBase):
                 lines.append(f"{cls:12s} score {det['score']:.2f}  (깊이 없음)")
                 continue
             p_surf = backproject_pixels(self.zed.camera, [[u, v]], [depth_val])[0]
-            p = clamp_to_support([surface_to_center([p_surf], cam_pos, mode="box")[0]])[0]
+            p = surface_to_center([p_surf], cam_pos, mode=self.correction_mode)[0]
+            if self.correction_mode != "none":
+                p = clamp_to_support([p])[0]
             estimates[cls] = p
             lines.append(f"{cls:12s} {det['score']:.2f}  "
                          f"({p[0]:+.3f}, {p[1]:+.3f}, {p[2]:+.3f})")
@@ -208,7 +213,8 @@ class RoboeBlockStacking(CortexBase):
         self._draw_estimates(estimates)
 
         header = (f"검출 {len(best)}/4   추론 {self.detector.last_latency_ms:.1f} ms   "
-                  f"@ {60.0/PERCEPTION_EVERY_N_STEPS:.0f} Hz\n" + "-" * 46)
+                  f"@ {60.0/PERCEPTION_EVERY_N_STEPS:.0f} Hz   보정={self.correction_mode}\n"
+                  + "-" * 52)
         self._report_perception(header + "\n" + ("\n".join(lines) if lines else "(검출 없음)"))
 
     def _draw_estimates(self, estimates):
@@ -231,6 +237,15 @@ class RoboeBlockStacking(CortexBase):
     def _report_perception(self, text):
         if self._perception_fn:
             self._perception_fn(text)
+
+    def set_correction_mode(self, mode: str):
+        """깊이->큐브중심 보정 방식 전환 (box / ray / none).
+
+        발표 데모용: none 으로 바꾸면 뷰포트의 점이 큐브에서 카메라 쪽으로 ~3cm 튀어나온다.
+        "깊이는 앞면을 준다"를 말이 아니라 화면으로 보여줄 수 있다.
+        """
+        if mode in ("box", "ray", "none"):
+            self.correction_mode = mode
 
     def set_perception_enabled(self, enabled: bool):
         self.perception_enabled = bool(enabled)

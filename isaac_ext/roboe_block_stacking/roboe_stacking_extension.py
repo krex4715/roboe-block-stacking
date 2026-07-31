@@ -95,6 +95,13 @@ class RoboeBlockStackingUI(BaseSampleUITemplate):
                     tooltip="ZED-X + YOLO 인식 실행. 끄면 ground truth 사용",
                     on_clicked_fn=self._on_perception_toggled,
                 )
+                # [ROBOE] 깊이->큐브중심 보정 방식. none 으로 바꾸면 뷰포트의 점이
+                # 큐브에서 카메라 쪽으로 ~3cm 튀어나오는 것이 눈으로 보인다 (발표 데모용).
+                self.task_ui_elements["Correction"] = dropdown_builder(
+                    "Depth 보정",
+                    items=["box (광선-박스 정확해)", "ray (반큐브)", "none (보정 없음)"],
+                    on_clicked_fn=self._on_correction_changed,
+                )
                 dict = {
                     "label": "Load World",
                     "type": "button",
@@ -232,6 +239,11 @@ class RoboeBlockStackingUI(BaseSampleUITemplate):
     def _on_perception_toggled(self, value):
         if self._sample is not None:
             self._sample.set_perception_enabled(bool(value))
+
+    def _on_correction_changed(self, value):
+        """dropdown_builder 는 선택된 항목 문자열을 넘겨준다. 앞 토큰이 모드명."""
+        if self._sample is not None:
+            self._sample.set_correction_mode(str(value).split()[0])
 
     def build_diagnostic_ui(self):
         with ui.VStack(spacing=5):
