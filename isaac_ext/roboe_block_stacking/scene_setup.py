@@ -14,6 +14,7 @@
 import numpy as np
 from isaacsim.core.api.objects import DynamicCuboid, VisualCuboid
 from isaacsim.core.utils.prims import create_prim
+from pxr import UsdGeom
 
 # 베이스 예제(franka_cortex.py)와 동일한 큐브 기하
 CUBE_SIZE = 0.0515
@@ -53,21 +54,57 @@ def default_cube_positions():
     return {name: np.array([x, CUBE_Y, CUBE_HALF]) for x, (name, _) in zip(xs, CUBE_SPECS)}
 
 
-def add_cubes(scene, positions=None):
-    """큐브 4개를 씬에 추가하고 {이름: 객체} 를 반환."""
+def add_cubes(scene, positions=None, name_suffix=""):
+    """물리 큐브 4개를 씬에 추가하고 {기본이름: 객체} 를 반환.
+
+    prim path 는 항상 `/World/Obs/<이름>` 으로 고정한다 (SDG 라벨·평가 스크립트가 이 경로를 쓴다).
+    `name_suffix` 는 **씬 레지스트리 이름**만 바꾼다 — ghost 모드에서 고스트가 behavior 가 찾는
+    이름("RedCube" 등)을 가져가야 하므로 물리 큐브는 "RedCubeReal" 로 비켜준다.
+    반환 딕셔너리의 키는 접미사와 무관하게 기본 이름이라, 호출부 코드는 바뀌지 않는다.
+    """
     positions = positions or default_cube_positions()
     cubes = {}
     for name, color in CUBE_SPECS:
         cubes[name] = scene.add(
             DynamicCuboid(
                 prim_path=f"/World/Obs/{name}",
-                name=name,
+                name=name + name_suffix,
                 size=CUBE_SIZE,
                 color=np.array(color),
                 position=np.asarray(positions[name]),
             )
         )
     return cubes
+
+
+def add_belief_cubes(scene, positions=None):
+    """로봇이 '믿는' 큐브(고스트) 4개. 물리도 충돌도 없고 **렌더링되지 않는다**.
+
+    왜 필요한가 - 이게 이 과제의 핵심 구조다:
+      물리 큐브를 그대로 behavior 에 등록하면, 로봇이 보는 위치 = 실제 위치가 되어
+      **인식을 꺼도 완벽하게 동작한다.** 즉 인식이 파이프라인에 실제로 기여하는지 증명할 수 없다.
+      고스트를 두면 로봇은 고스트(=인식 결과)만 보고 계획하고, 물리적으로는 진짜 큐브를 집는다.
+      -> 인식 오차가 곧 파지 오차가 되고, 카메라를 가리면 로봇이 옛 위치로 간다.
+      Cortex 원설계(cortex_ros 의 belief/real 분리)와도 일치한다.
+
+    **렌더링을 끄는 이유**: 고스트가 화면에 보이면 카메라가 고스트를 검출해버려
+    인식이 자기 자신을 보는 순환이 된다. 사람이 볼 수 있게는 debug_draw 로 따로 그린다.
+    """
+    positions = positions or default_cube_positions()
+    ghosts = {}
+    for name, color in CUBE_SPECS:
+        ghost = scene.add(
+            VisualCuboid(
+                prim_path=f"/World/Belief/{name}",
+                name=name,  # behavior 의 desired_stack 이 찾는 이름
+                size=CUBE_SIZE,
+                color=np.array(color),
+                position=np.asarray(positions[name]),
+            )
+        )
+        UsdGeom.Imageable(ghost.prim).MakeInvisible()
+        ghosts[name] = ghost
+    return ghosts
 
 
 def add_lighting(dome_intensity: float = 500.0, distant_intensity: float = 700.0):

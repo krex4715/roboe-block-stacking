@@ -102,6 +102,12 @@ class RoboeBlockStackingUI(BaseSampleUITemplate):
                     items=["box (광선-박스 정확해)", "ray (반큐브)", "none (보정 없음)"],
                     on_clicked_fn=self._on_correction_changed,
                 )
+                # [ROBOE] belief 구조. LOAD 를 다시 눌러야 적용된다(씬 구성이 달라짐).
+                self.task_ui_elements["Belief"] = dropdown_builder(
+                    "Belief 구조",
+                    items=["ghost (인식이 제어에 반영)", "direct (ground truth 비교군)"],
+                    on_clicked_fn=self._on_belief_changed,
+                )
                 dict = {
                     "label": "Load World",
                     "type": "button",
@@ -244,6 +250,13 @@ class RoboeBlockStackingUI(BaseSampleUITemplate):
         """dropdown_builder 는 선택된 항목 문자열을 넘겨준다. 앞 토큰이 모드명."""
         if self._sample is not None:
             self._sample.set_correction_mode(str(value).split()[0])
+
+    def _on_belief_changed(self, value):
+        if self._sample is not None:
+            mode = str(value).split()[0]
+            self._sample.set_belief_mode(mode)
+            self.on_perception(f"belief 구조를 '{mode}' 로 바꿨습니다.\n"
+                               "씬 구성이 달라지므로 **LOAD 를 다시 눌러야** 적용됩니다.")
 
     def build_diagnostic_ui(self):
         with ui.VStack(spacing=5):

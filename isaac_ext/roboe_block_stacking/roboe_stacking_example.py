@@ -24,9 +24,10 @@ from isaacsim.cortex.framework.tools import SteadyRate
 from isaacsim.examples.interactive.cortex.cortex_base import CortexBase
 
 # [ROBOE] 씬/비전 공통 모듈. 상대 import 라 GUI 확장 경로와 standalone 양쪽에서 동작한다.
+from .perception.cortex_bridge import CortexPerceptionBridge
 from .perception.estimator_3d import backproject_pixels, clamp_to_support, sample_depth, surface_to_center
 from .perception.zed_camera import ZedXCamera
-from .scene_setup import add_cubes, add_lighting, add_tower_marker
+from .scene_setup import add_belief_cubes, add_cubes, add_lighting, add_tower_marker
 
 DEFAULT_TOWER_POSITION = np.array([0.25, 0.30, 0.0])
 
@@ -46,6 +47,8 @@ MARKER_COLORS = {
     "green_cube": (0.5, 1.0, 0.2, 1.0),
     "blue_cube": (0.3, 0.4, 1.0, 1.0),
 }
+BLOCK_TO_CLASS = {"RedCube": "red_cube", "YellowCube": "yellow_cube",
+                  "GreenCube": "green_cube", "BlueCube": "blue_cube"}
 
 
 class ContextStateMonitor(DfDiagnosticsMonitor):
@@ -85,17 +88,35 @@ class RoboeBlockStacking(CortexBase):
         # "none" 으로 두면 점이 큐브보다 ~3cm 카메라 쪽으로 앞서 찍히는 것을 눈으로 볼 수 있다.
         self.correction_mode = "box"
 
+        # [ROBOE] belief 구조 (scene_setup.add_belief_cubes 주석 참고)
+        #   "ghost"  : 로봇은 고스트(=인식 결과)만 보고 계획, 물리적으로는 진짜 큐브를 집는다
+        #              -> 인식 오차가 곧 파지 오차. 인식이 진짜로 루프 안에 있음을 증명 가능
+        #   "direct" : 물리 큐브를 그대로 등록 (스톡 동작 = 인식 없이도 완벽히 동작하는 비교군)
+        self.belief_mode = "ghost"
+        self.cubes = {}          # 물리 큐브
+        self.belief_cubes = {}   # 고스트
+        self.bridge = CortexPerceptionBridge()
+
     def setup_scene(self):
         world = self.get_world()
         self.robot = world.add_robot(add_franka_to_stage(name="franka", prim_path="/World/Franka"))
 
         # [ROBOE] 큐브 스펙/조명을 scene_setup 으로 공통화.
         # SDG(학습 이미지)와 런타임(추론 이미지)이 같은 코드로 만들어져야 도메인 갭이 없다.
-        cubes = add_cubes(world.scene)
-        for obj in cubes.values():
-            # register_obstacle 이 이 큐브들을 behavior 가 보는 world model 에 넣는다
-            # (BuildTowerContext.reset() 이 robot.registered_obstacles 를 CortexObject 로 감쌈)
-            self.robot.register_obstacle(obj)
+        #
+        # register_obstacle 이 "behavior 가 보는 세계"를 정한다
+        # (BuildTowerContext.reset() 이 robot.registered_obstacles 를 CortexObject 로 감쌈).
+        # 무엇을 등록하느냐가 곧 belief 구조 선택이다.
+        if self.belief_mode == "ghost":
+            self.cubes = add_cubes(world.scene, name_suffix="Real")  # 카메라가 보는 진짜 큐브
+            self.belief_cubes = add_belief_cubes(world.scene)        # 로봇이 믿는 고스트
+            for obj in self.belief_cubes.values():
+                self.robot.register_obstacle(obj)
+        else:
+            self.cubes = add_cubes(world.scene)
+            self.belief_cubes = {}
+            for obj in self.cubes.values():
+                self.robot.register_obstacle(obj)
 
         world.scene.add_default_ground_plane()
         add_lighting()
@@ -212,31 +233,66 @@ class RoboeBlockStacking(CortexBase):
         self.last_estimates = estimates
         self._draw_estimates(estimates)
 
+        # [ROBOE] 여기가 인식이 실제 제어에 연결되는 지점.
+        # bridge 가 CortexObject.set_measured_pose() 로 발행하면
+        # behavior 의 monitor_perception() 이 belief 를 동기화한다.
+        bridge_line = ""
+        ctx = getattr(self.decider_network, "context", None) if self.decider_network else None
+        if ctx is not None:
+            # direct 모드에서는 belief == 물리 큐브라 직접 쓰면 큐브가 순간이동한다.
+            # 측정값만 발행하고 동기화는 프레임워크(monitor_perception)에 맡긴다.
+            self.bridge.direct_write = (self.belief_mode == "ghost")
+            self.bridge.update(ctx, best, estimates, self.robot)
+            bridge_line = "\n" + self.bridge.summary()
+            for name, reason in sorted(self.bridge.last_reasons.items()):
+                if reason != "발행":
+                    bridge_line += f"\n  {name:11s} {reason}"
+
         header = (f"검출 {len(best)}/4   추론 {self.detector.last_latency_ms:.1f} ms   "
-                  f"@ {60.0/PERCEPTION_EVERY_N_STEPS:.0f} Hz   보정={self.correction_mode}\n"
-                  + "-" * 52)
-        self._report_perception(header + "\n" + ("\n".join(lines) if lines else "(검출 없음)"))
+                  f"@ {60.0/PERCEPTION_EVERY_N_STEPS:.0f} Hz   보정={self.correction_mode}   "
+                  f"belief={self.belief_mode}\n" + "-" * 52)
+        self._report_perception(header + "\n" + ("\n".join(lines) if lines else "(검출 없음)")
+                                + bridge_line)
 
     def _draw_estimates(self, estimates):
-        """인식된 3D 위치를 뷰포트에 점으로 그린다.
+        """뷰포트에 두 가지를 그린다 - 이 둘의 차이가 곧 파이프라인의 상태를 보여준다.
 
-        큐브 실제 위치와 마커가 어긋나면 그게 곧 인식 오차다 - 눈으로 바로 확인된다.
+          작은 점 : 이번 프레임의 **원시 인식 결과**
+          큰 점   : 로봇이 **믿고 있는 위치**(고스트) — 게이팅/필터를 거친 결과
+
+        평소엔 겹쳐 보이지만, 카메라를 가리거나 게이트가 걸리면 큰 점만 남는다.
+        즉 "로봇이 무엇을 보고 계획하는가"가 눈에 보인다. (고스트 프림 자체는
+        카메라가 자기 자신을 검출하지 않도록 렌더링을 꺼두었다)
         """
         draw = self._get_debug_draw()
-        if draw is None or not estimates:
+        if draw is None:
             return
         draw.clear_points()
         pts, colors, sizes = [], [], []
+
         for cls, p in estimates.items():
-            # 큐브 위로 살짝 띄워 큐브에 가려지지 않게
-            pts.append((float(p[0]), float(p[1]), float(p[2]) + 0.06))
+            pts.append((float(p[0]), float(p[1]), float(p[2]) + 0.05))
             colors.append(MARKER_COLORS.get(cls, (1.0, 1.0, 1.0, 1.0)))
-            sizes.append(14)
-        draw.draw_points(pts, colors, sizes)
+            sizes.append(8)
+
+        for name, ghost in self.belief_cubes.items():
+            cls = BLOCK_TO_CLASS.get(name)
+            p, _ = ghost.get_world_pose()
+            pts.append((float(p[0]), float(p[1]), float(p[2]) + 0.09))
+            colors.append(MARKER_COLORS.get(cls, (1.0, 1.0, 1.0, 1.0)))
+            sizes.append(20)
+
+        if pts:
+            draw.draw_points(pts, colors, sizes)
 
     def _report_perception(self, text):
         if self._perception_fn:
             self._perception_fn(text)
+
+    def set_belief_mode(self, mode: str):
+        """belief 구조 전환. 씬 구성이 달라지므로 다음 LOAD 부터 적용된다."""
+        if mode in ("ghost", "direct"):
+            self.belief_mode = mode
 
     def set_correction_mode(self, mode: str):
         """깊이->큐브중심 보정 방식 전환 (box / ray / none).
@@ -275,7 +331,16 @@ class RoboeBlockStacking(CortexBase):
         world = self.get_world()
         world.step(False, False)
 
-        # [ROBOE] 인식은 매 스텝이 아니라 주기적으로 돌린다 (위 PERCEPTION_EVERY_N_STEPS 주석 참고)
+        # [ROBOE] 파지 추적/부착은 **매 스텝** 돌려야 한다.
+        # in_gripper 가 매 스텝 깜빡이는 신호라 10Hz 로 샘플링하면 엇박이 나 부착이 안 걸린다.
+        if (self.perception_enabled and self.belief_mode == "ghost"
+                and self.decider_network is not None):
+            try:
+                self.bridge.tick(self.decider_network.context, self.robot)
+            except Exception as exc:
+                carb.log_warn(f"[ROBOE] bridge.tick 실패: {exc}")
+
+        # [ROBOE] 인식(무거움)은 주기적으로만 (위 PERCEPTION_EVERY_N_STEPS 주석 참고)
         self._perception_step += 1
         if self.perception_enabled and self._perception_step % PERCEPTION_EVERY_N_STEPS == 0:
             try:
@@ -322,6 +387,10 @@ class RoboeBlockStacking(CortexBase):
         self.robot = None
         self.zed = None
         self.decider_network = None
+        self.detector = None
+        self.cubes = {}
+        self.belief_cubes = {}
+        self.bridge.reset()
         gc.collect()
         await super().load_world_async()
 
