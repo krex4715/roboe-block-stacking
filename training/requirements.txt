@@ -1,0 +1,22 @@
+# [ROBOE] YOLO 학습 전용 venv.
+#
+# **isaacsim 환경에 설치하지 않는 이유**:
+# ultralytics 는 opencv-python(GUI 빌드)과 matplotlib 등을 끌고 오는데,
+# isaacsim 환경은 opencv-python-headless / numpy 1.26 에 고정돼 있어 충돌 위험이 있다.
+# 시뮬레이터가 안 뜨면 과제 전체가 막히므로, 학습 환경을 분리하고
+# 산출물(TorchScript)만 넘긴다. 추론 시엔 isaacsim 환경의 순정 torch + torchvision.ops.nms 로 돈다.
+# -> 학습환경 != 런타임환경 분리는 실무 배포의 기본이기도 하다.
+#
+# **torch 버전을 isaacsim 환경(2.7.0)에 맞춰 고정하는 이유**:
+# TorchScript 아카이브는 만든 버전보다 낮은 런타임에서 로드가 실패할 수 있다.
+# 처음에 최신 torch(2.13)로 설치했다가 이 위험을 발견하고 2.7.0 으로 내렸다.
+# 산출물을 소비하는 쪽 버전에 생산 쪽을 맞추는 것이 안전하다.
+#
+# 설치:
+#   python -m venv training/.venv
+#   training/.venv/bin/pip install -r training/requirements.txt \
+#       --extra-index-url https://download.pytorch.org/whl/cu128
+
+torch==2.7.0
+torchvision==0.22.0
+ultralytics==8.3.0

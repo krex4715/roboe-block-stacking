@@ -13,6 +13,8 @@ data/
 # 학습 산출물 캐시 (최종 가중치는 models/에 커밋)
 training/runs/
 training/.venv/
+training/*.pt
+training/yolo*.pt
 
 # Python
 __pycache__/
