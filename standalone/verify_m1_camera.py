@@ -92,6 +92,45 @@ def save_images(rgb, depth, marks):
     cv2.imwrite(str(outdir / "overlay.png"), overlay)
 
 
+def report_color_separability(rgb, marks):
+    """렌더된 픽셀에서 큐브 색이 서로 충분히 구분되는지 측정.
+
+    조명이 세면 채널이 255 근처로 포화되며 색상(hue) 정보가 뭉개진다. 특히 노랑/연두처럼
+    색상환에서 가까운 쌍은 바로 오분류로 이어지므로, 눈으로 보지 말고 수치로 감시한다.
+    """
+    means, hsvs = {}, {}
+    for name, (u, v), ok in marks:
+        if not ok:
+            continue
+        ui, vi = int(round(u)), int(round(v))
+        patch = rgb[max(0, vi - 6) : vi + 7, max(0, ui - 6) : ui + 7].reshape(-1, 3).astype(float)
+        if patch.size == 0:
+            continue
+        means[name] = patch.mean(axis=0)
+        hsvs[name] = cv2.cvtColor(np.uint8([[means[name]]]), cv2.COLOR_RGB2HSV)[0, 0]
+
+    if len(means) < 2:
+        return
+    print("\n[색 분리도] 큐브 중심 13x13 픽셀 평균")
+    for name in means:
+        h, s, v = hsvs[name]
+        clip = (means[name] > 250).sum()
+        warn = "  ⚠ 채널 포화" if clip else ""
+        print(f"    {name:11s} RGB={np.round(means[name]).astype(int)}  hue={h*2:5.1f}° "
+              f"sat={s:3d} val={v:3d}{warn}")
+
+    names = list(means)
+    pairs = [(a, b, float(np.linalg.norm(means[a] - means[b])))
+             for i, a in enumerate(names) for b in names[i + 1:]]
+    pairs.sort(key=lambda x: x[2])
+    print(f"    가장 가까운 색 쌍: {pairs[0][0]} vs {pairs[0][1]} = {pairs[0][2]:.1f} / 255 "
+          f"(가장 먼 쌍 {pairs[-1][2]:.1f})")
+    # 임계 80: 노랑/연두 쌍은 명세상 색상환에서 가까울 수밖에 없어 실측 95가 우리 기준선이다.
+    # 이보다 더 내려가면 조명이 색을 뭉갠 것이므로 회귀로 본다.
+    if pairs[0][2] < 80:
+        print("    ⚠ 경고: 최소 색 거리가 80 미만 - 오분류 위험. 조명/색상 조정 검토")
+
+
 def main():
     world = World(stage_units_in_meters=1.0)
     cubes = build_scene(world)
@@ -168,6 +207,7 @@ def main():
         rows.append((name, gt, (u, v), d, errs))
 
     save_images(rgb, depth, marks)
+    report_color_separability(rgb, marks)
 
     # ---------------------------------------------------------------- 결과 출력
     print("\n" + "=" * 96)

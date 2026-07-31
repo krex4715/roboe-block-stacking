@@ -10,14 +10,26 @@
 import asyncio
 import os
 
+import numpy as np
 import omni
 import omni.ext
 import omni.ui as ui
 from isaacsim.cortex.framework.cortex_world import CortexWorld
 from isaacsim.examples.browser import get_instance as get_browser_instance
 from isaacsim.examples.interactive.base_sample import BaseSampleUITemplate
-from isaacsim.examples.interactive.user_examples.roboe_block_stacking.roboe_stacking_example import RoboeBlockStacking
-from isaacsim.gui.components.ui_utils import btn_builder, cb_builder, dropdown_builder, get_style, str_builder
+from isaacsim.examples.interactive.user_examples.roboe_block_stacking.roboe_stacking_example import (
+    DEFAULT_TOWER_POSITION,
+    RoboeBlockStacking,
+)
+from isaacsim.examples.interactive.user_examples.roboe_block_stacking.scene_setup import validate_tower_position
+from isaacsim.gui.components.ui_utils import (
+    btn_builder,
+    cb_builder,
+    dropdown_builder,
+    float_builder,
+    get_style,
+    str_builder,
+)
 
 
 class RoboeBlockStackingExtension(omni.ext.IExt):
@@ -66,6 +78,16 @@ class RoboeBlockStackingUI(BaseSampleUITemplate):
 
         with self._controls_frame:
             with ui.VStack(style=get_style(), spacing=5, height=0):
+                # [ROBOE] 적재 목표 위치 (과제: "사용자가 임의로 적절한 위치를 설정")
+                # LOAD 를 누를 때 읽어서 behavior 로 전달한다.
+                self.task_ui_elements["Tower X"] = float_builder(
+                    "Tower X (m)", default_val=float(DEFAULT_TOWER_POSITION[0]),
+                    tooltip="적재 목표 위치 X. 로봇 베이스에서 0.30~0.75m, 큐브 스폰과 0.15m 초과",
+                )
+                self.task_ui_elements["Tower Y"] = float_builder(
+                    "Tower Y (m)", default_val=float(DEFAULT_TOWER_POSITION[1]),
+                    tooltip="적재 목표 위치 Y",
+                )
                 dict = {
                     "label": "Load World",
                     "type": "button",
@@ -115,6 +137,26 @@ class RoboeBlockStackingUI(BaseSampleUITemplate):
 
     def _on_load_world(self):
         self._sample.behavior = self.get_behavior()
+        # [ROBOE] UI의 적재 위치를 읽어 검증 후 sample 에 전달.
+        # behavior 는 도달 불가 위치면 조용히 GoHome 으로 빠져 "아무것도 안 하는" 것처럼
+        # 보이므로, 여기서 미리 걸러 이유를 로그로 알려준다.
+        pos = np.array(
+            [
+                float(self.task_ui_elements["Tower X"].get_value_as_float()),
+                float(self.task_ui_elements["Tower Y"].get_value_as_float()),
+                0.0,
+            ]
+        )
+        ok, msg = validate_tower_position(pos)
+        if ok:
+            self._sample.tower_position = pos
+            print(f"[ROBOE] 적재 목표 위치: {pos[:2]} - {msg}")
+        else:
+            print(f"[ROBOE] ⚠ 적재 위치 거부: {msg} -> 기본값 {DEFAULT_TOWER_POSITION[:2]} 사용")
+            self._sample.tower_position = np.array(DEFAULT_TOWER_POSITION)
+            self.task_ui_elements["Tower X"].set_value(float(DEFAULT_TOWER_POSITION[0]))
+            self.task_ui_elements["Tower Y"].set_value(float(DEFAULT_TOWER_POSITION[1]))
+
         self.loaded = True
         super()._on_load_world()
 

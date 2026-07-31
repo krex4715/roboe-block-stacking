@@ -12,7 +12,7 @@
 """
 
 import numpy as np
-from isaacsim.core.api.objects import DynamicCuboid
+from isaacsim.core.api.objects import DynamicCuboid, VisualCuboid
 from isaacsim.core.utils.prims import create_prim
 
 # 베이스 예제(franka_cortex.py)와 동일한 큐브 기하
@@ -21,14 +21,30 @@ CUBE_HALF = CUBE_SIZE / 2.0
 CUBE_Y = -0.4
 CUBE_X_RANGE = (0.3, 0.7)
 
-# 이름은 behavior의 desired_stack("<Color>Cube")과 일치해야 한다.
-# 색은 베이스 예제 값. (M2에서 GreenCube를 과제의 '연두'로 조정 예정)
+# 이름은 behavior의 desired_stack("<Color>Cube")과 일치해야 하므로 **이름은 바꾸지 않는다**.
+# 색만 과제 명세에 맞춘다: GreenCube 를 초록(0,0.7,0) -> **연두(yellow-green)** 로 조정.
+#
+# 연두 알베도는 눈대중이 아니라 **렌더 픽셀 실측**으로 골랐다. 연두는 노랑과 색상환에서
+# 가까워 오분류 위험이 있는데, 알베도를 노랑에서 멀리 둔다고 렌더 색이 멀어지지 않기 때문이다
+# (R이 내려가면서 B가 올라가 유클리드 거리가 상쇄된다). 후보 5종 실측 (노랑과의 RGB 거리):
+#     (0.55,0.85,0.15) hue 72도 sat  93 -> 82      (0.10,0.80,0.02) hue 96도 sat 174 -> 95  <= 채택
+#     (0.45,0.80,0.10) hue 74도 sat 110 -> 70      (0.00,0.70,0.00) hue120도 sat 206 -> 191 (스톡 초록)
+#     (0.25,0.85,0.05) hue 82도 sat 143 -> 60 (최악)
+# 즉 "연두답게 보이면서 노랑과 가장 잘 구분되는" 지점이 (0.10, 0.80, 0.02) 이다.
+# 그래도 다른 색 쌍(193~305)보다는 가까우므로, 혼동 여부를 M3 혼동행렬로 최종 검증한다.
 CUBE_SPECS = [
     ("RedCube", (0.7, 0.0, 0.0)),
     ("BlueCube", (0.0, 0.0, 0.7)),
     ("YellowCube", (0.7, 0.7, 0.0)),
-    ("GreenCube", (0.0, 0.7, 0.0)),
+    ("GreenCube", (0.10, 0.80, 0.02)),  # 연두 (렌더 hue 96도, sat 174)
 ]
+
+# 적재 목표 위치 제약 (behavior 코드에서 역산한 값)
+#   - 팔 도달 범위: block 픽업이 |p| < 0.25 또는 > 0.81 이면 거부됨 -> 여유를 두고 0.30~0.75
+#   - 큐브 스폰과의 거리: 타워에서 0.15m 안쪽 블록은 픽업이 거부됨 -> 0.15m 초과 요구
+TOWER_REACH_MIN = 0.30
+TOWER_REACH_MAX = 0.75
+TOWER_CLEARANCE = 0.15
 
 
 def default_cube_positions():
@@ -54,14 +70,19 @@ def add_cubes(scene, positions=None):
     return cubes
 
 
-def add_lighting(dome_intensity: float = 900.0, distant_intensity: float = 1200.0):
+def add_lighting(dome_intensity: float = 500.0, distant_intensity: float = 700.0):
     """돔(전역 확산) + 디스턴트(방향성 그림자) 2등 구성.
 
     돔만 있으면 그림자가 없어 큐브 경계가 흐려지고, 디스턴트만 있으면 그늘이 새까매져
     한쪽 면이 사라진다. 둘을 섞어야 색과 형태가 모두 살아난다.
 
-    세기는 흰색 Franka가 과노출(픽셀 포화)되지 않는 선에서 정했다. 포화되면 로봇 표면의
-    형태 정보가 사라지고, 자동 노출이 있는 실제 카메라와도 다른 그림이 된다.
+    세기는 **채널 클리핑이 나지 않는 선**에서 정했다. 이게 생각보다 중요하다:
+    조명이 세면 큐브의 R/G 채널이 255 근처로 포화되면서 **색상(hue) 정보가 뭉개진다**.
+    실측 예 - 돔900/디스턴트1200 에서 연두 큐브가 RGB(237,244,193), 채도 54까지 바래
+    노랑(채도 171)과의 RGB 거리가 113밖에 안 됐다(다른 색 쌍은 193~297).
+    노랑/연두처럼 색상환에서 가까운 쌍이 있을 때 이건 바로 오분류로 이어진다.
+    -> verify_m1_camera.py 가 매 실행마다 색 분리도를 측정해 회귀를 잡는다.
+
     SDG 단계에서는 이 값들을 랜덤화해 조명 변화에 강인한 검출기를 만든다.
     """
     create_prim(
@@ -76,3 +97,44 @@ def add_lighting(dome_intensity: float = 900.0, distant_intensity: float = 1200.
         orientation=np.array([0.9239, 0.0, 0.3827, 0.0]),  # y축 기준 45도
         attributes={"inputs:intensity": distant_intensity, "inputs:angle": 1.0},
     )
+
+
+def validate_tower_position(position, cube_positions=None):
+    """적재 목표 위치가 물리적으로 가능한지 검사. (ok: bool, message: str) 반환.
+
+    behavior 는 조건을 어기면 조용히 GoHome 으로 빠져 '아무것도 안 하는' 것처럼 보인다.
+    사용자가 위치를 입력하는 UI에서는 그 전에 걸러서 이유를 알려주는 편이 낫다.
+    """
+    p = np.asarray(position, dtype=float)
+    r = float(np.linalg.norm(p[:2]))
+    if r < TOWER_REACH_MIN:
+        return False, f"로봇 베이스에 너무 가깝습니다 (거리 {r:.2f}m < {TOWER_REACH_MIN}m)"
+    if r > TOWER_REACH_MAX:
+        return False, f"팔이 닿지 않습니다 (거리 {r:.2f}m > {TOWER_REACH_MAX}m)"
+
+    cube_positions = cube_positions or default_cube_positions()
+    for name, cp in cube_positions.items():
+        d = float(np.linalg.norm(np.asarray(cp)[:2] - p[:2]))
+        if d <= TOWER_CLEARANCE:
+            return False, f"{name} 스폰 위치와 너무 가깝습니다 ({d:.2f}m <= {TOWER_CLEARANCE}m)"
+    return True, f"OK (베이스에서 {r:.2f}m)"
+
+
+def add_tower_marker(position, scene=None):
+    """적재 목표 위치를 눈으로 보이게 하는 얇은 표식판.
+
+    - 물리 없는 VisualCuboid 이고 **register_obstacle 하지 않는다**.
+      등록하면 behavior 가 이것도 '쌓을 블록'으로 오인한다.
+    - 색은 무채색으로 둬서 검출기가 큐브로 헷갈리지 않게 한다
+      (SDG 이미지에도 함께 들어가므로 배경으로 학습된다).
+    """
+    p = np.asarray(position, dtype=float).copy()
+    p[2] = 0.001  # 지면에 살짝 띄워 z-fighting 방지
+    marker = VisualCuboid(
+        prim_path="/World/TowerMarker",
+        name="tower_marker",
+        position=p,
+        scale=np.array([0.12, 0.12, 0.002]),
+        color=np.array([0.25, 0.25, 0.25]),
+    )
+    return scene.add(marker) if scene is not None else marker

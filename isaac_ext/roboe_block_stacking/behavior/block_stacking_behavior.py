@@ -212,7 +212,12 @@ class BuildTowerContext(DfRobotApiContext):
     class BlockTower:
         def __init__(self, tower_position, block_height, context):
             self.context = context
-            order_preference = ["Blue", "Yellow", "Green", "Red"]
+            # [ROBOE] 과제 명세의 집기 순서: 빨강 -> 노랑 -> 연두 -> 파랑.
+            # next_block_placement_T 가 dz = (h + 0.5 + margin) * block_height 로 놓으므로
+            # desired_stack[0] 이 맨 아래에 깔린다. 즉 "먼저 집는 색"을 앞에 두면
+            # 그대로 아래->위 순서가 된다. (연두는 GreenCube 에 매핑 - README 참고)
+            # 스톡 원본: ["Blue", "Yellow", "Green", "Red"]
+            order_preference = ["Red", "Yellow", "Green", "Blue"]
             self.desired_stack = [("%sCube" % c) for c in order_preference]
             self.tower_position = tower_position
             self.block_height = block_height
@@ -963,7 +968,15 @@ class BlockPickAndPlaceDispatch(DfDecider):
             return DfDecision("place")
 
 
-def make_decider_network(robot):
+# [ROBOE] 스톡은 tower_position 이 하드코딩돼 있었다. 과제의 "적재 목표 위치는 사용자가
+# 임의로 설정"을 만족시키기 위해 인자로 노출한다. 기본값은 스톡과 동일해 하위 호환된다.
+DEFAULT_TOWER_POSITION = np.array([0.25, 0.3, 0.0])
+
+
+def make_decider_network(robot, tower_position=None):
+    if tower_position is None:
+        tower_position = DEFAULT_TOWER_POSITION
     return DfNetwork(
-        BlockPickAndPlaceDispatch(), context=BuildTowerContext(robot, tower_position=np.array([0.25, 0.3, 0.0]))
+        BlockPickAndPlaceDispatch(),
+        context=BuildTowerContext(robot, tower_position=np.asarray(tower_position, dtype=float)),
     )
