@@ -8,6 +8,8 @@
 #         ZED-X 카메라 스폰/초기화, tower_position 을 UI에서 받아 behavior 에 전달
 #   - M4/M5 예정: YOLO 추론 + 3D 추정 + Cortex bridge 연결
 
+import gc
+
 import carb
 import numpy as np
 import omni
@@ -45,6 +47,7 @@ class RoboeBlockStacking(CortexBase):
         self._monitor_fn = monitor_fn
         self.behavior = None
         self.robot = None
+        self.decider_network = None
         self.context_monitor = ContextStateMonitor(print_dt=0.25, diagnostic_fn=self._on_monitor_update)
         # [ROBOE] UI에서 덮어쓴다. 과제의 "적재 목표 위치는 사용자가 임의로 설정"에 대응.
         self.tower_position = np.array(DEFAULT_TOWER_POSITION)
@@ -138,5 +141,37 @@ class RoboeBlockStacking(CortexBase):
         if world.physics_callback_exists("sim_step"):
             world.remove_physics_callback("sim_step")
 
+    # ------------------------------------------------------------------ [ROBOE]
+    async def load_world_async(self):
+        """LOAD 를 누를 때마다 씬을 확실히 새로 만든다.
+
+        왜 필요한가 (베이스 예제의 잠재 버그):
+        CortexBase.load_world_async 는 `if CortexWorld.instance() is None:` 일 때만
+        setup_scene() 을 부른다. 그런데 월드 싱글톤은 SimulationContext._instance 하나를
+        모든 하위 클래스가 공유하므로, **다른 예제를 로드했다가 돌아오면** 인스턴스가 살아남아
+        setup_scene() 이 통째로 건너뛰어진다. 반면 스테이지는 create_new_stage_async() 로
+        이미 비워진 상태라, robot / 큐브 / 카메라 참조가 전부 '사라진 프림'을 가리키게 된다.
+        그 상태로 setup_post_load() 가 돌면 첫 접근에서 예외가 나는데, async 태스크 안이라
+        GUI 콘솔에는 "Task exception was never retrieved" 로만 보여 원인 파악이 어렵다.
+
+        그래서 이전 월드를 정리하고 참조를 비운 뒤 부모 구현에 넘긴다.
+        (스톡 Franka Cortex Examples 도 같은 구조라 동일한 증상이 난다)
+        """
+        if self._world is not None:
+            self._world_cleanup()
+            self._world.clear_instance()
+            self._world = None
+        elif CortexWorld.instance() is not None:
+            CortexWorld.instance().clear_instance()
+
+        self.robot = None
+        self.zed = None
+        self.decider_network = None
+        gc.collect()
+        await super().load_world_async()
+
     def world_cleanup(self):
-        pass
+        """월드가 정리될 때 우리 쪽 참조도 함께 버린다 (죽은 프림 참조 방지)."""
+        self.robot = None
+        self.zed = None
+        self.decider_network = None
