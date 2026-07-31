@@ -15,6 +15,8 @@ training/runs/
 training/.venv/
 training/*.pt
 training/yolo*.pt
+training/*.torchscript
+training/*.onnx
 
 # Python
 __pycache__/

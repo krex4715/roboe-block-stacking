@@ -216,6 +216,18 @@ class Randomizer:
         tcp = self._gripper_tcp()
         if tcp is None or tcp[2] < CUBE_HALF:
             return
+
+        # 손가락을 큐브 반폭에 맞춰 "쥔" 상태로 만든다. 안 맞추면 큐브가 손가락을 관통해
+        # 물리 스텝에서 튕겨나가고, 그림도 실제 파지 장면과 달라진다.
+        if self.franka is not None:
+            try:
+                q = np.asarray(self.franka.get_joint_positions(), dtype=float)
+                q[-2:] = CUBE_HALF  # 각 손가락이 중심에서 반폭만큼 벌어짐
+                self.franka.set_joint_positions(q)
+                self.franka.set_joint_velocities(np.zeros_like(q))
+            except Exception:
+                pass
+
         name = self.names[int(self.rng.integers(0, len(self.names)))]
         self.cubes[name].set_world_pose(
             position=tcp, orientation=yaw_quat(self.rng.uniform(0, np.pi / 2))
