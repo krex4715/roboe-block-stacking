@@ -34,14 +34,29 @@ parser.add_argument("--device", type=str, default="0")
 parser.add_argument("--project", type=str, default=str(REPO / "training" / "runs"))
 parser.add_argument("--name", type=str, default="cubes")
 parser.add_argument("--seed", type=int, default=0)
+parser.add_argument("--skip-train", action="store_true",
+                    help="학습을 건너뛰고 models/best.pt 로 검증+export 만 다시 수행")
 args = parser.parse_args()
 
 from ultralytics import YOLO  # noqa: E402
 
 
+def copy_if_different(src, dst):
+    """ultralytics 가 이미 목적지에 직접 내보낸 경우 SameFileError 가 나므로 방어."""
+    src, dst = Path(src), Path(dst)
+    if src.resolve() != dst.resolve():
+        shutil.copy(src, dst)
+    return dst
+
+
 def main():
     models_dir = REPO / "models"
     models_dir.mkdir(exist_ok=True)
+
+    if args.skip_train:
+        model = YOLO(str(models_dir / "best.pt"))
+        print(f"[train] --skip-train: {models_dir/'best.pt'} 로 검증/export 만 수행")
+        return finish(model, models_dir)
 
     model = YOLO(args.model)
     print(f"[train] {args.model} -> {args.data} (imgsz={args.imgsz}, epochs={args.epochs})")
@@ -69,7 +84,11 @@ def main():
         mosaic=0.5,
         plots=True,
     )
+    return finish(model, models_dir)
 
+
+def finish(model, models_dir):
+    """검증 + 산출물 export + 메타 기록. 학습을 건너뛰어도 이 단계만 다시 돌릴 수 있다."""
     # 검증 - held-out val(다른 시드로 생성)에서 정직한 수치를 뽑는다
     metrics = model.val(data=args.data, imgsz=args.imgsz, device=args.device,
                         project=args.project, name=f"{args.name}_val", exist_ok=True)
@@ -119,14 +138,14 @@ def main():
     # 배포 산출물
     best = Path(model.trainer.best) if getattr(model, "trainer", None) else None
     if best and best.exists():
-        shutil.copy(best, models_dir / "best.pt")
+        copy_if_different(best, models_dir / "best.pt")
     export_model = YOLO(str(models_dir / "best.pt"))
 
     ts = export_model.export(format="torchscript", imgsz=args.imgsz, device=args.device)
-    shutil.copy(ts, models_dir / "best.torchscript")
+    copy_if_different(ts, models_dir / "best.torchscript")
     try:
         onnx = export_model.export(format="onnx", imgsz=args.imgsz, opset=17, device=args.device)
-        shutil.copy(onnx, models_dir / "best.onnx")
+        copy_if_different(onnx, models_dir / "best.onnx")
     except Exception as exc:
         print(f"[export] onnx 실패(무시): {exc}")
 

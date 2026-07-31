@@ -1,0 +1,63 @@
+{
+  "class_names": [
+    "red_cube",
+    "yellow_cube",
+    "green_cube",
+    "blue_cube"
+  ],
+  "imgsz": 640,
+  "preprocess": {
+    "letterbox": true,
+    "pad_value": 114,
+    "scale": "1/255",
+    "channel_order": "RGB",
+    "layout": "NCHW"
+  },
+  "output": "(1, 4+nc, N) - xywh(픽셀, letterbox 좌표계) + 클래스 점수, NMS 미적용",
+  "mAP50": 0.9949250000000001,
+  "mAP50_95": 0.9694800932084575,
+  "per_class_AP50": {
+    "red_cube": 0.995,
+    "yellow_cube": 0.9947,
+    "green_cube": 0.995,
+    "blue_cube": 0.995
+  },
+  "confusion_matrix": [
+    [
+      300,
+      0,
+      0,
+      0,
+      1
+    ],
+    [
+      0,
+      299,
+      1,
+      0,
+      3
+    ],
+    [
+      0,
+      0,
+      298,
+      0,
+      2
+    ],
+    [
+      0,
+      0,
+      0,
+      300,
+      1
+    ],
+    [
+      0,
+      1,
+      0,
+      0,
+      0
+    ]
+  ],
+  "torch_version_note": "isaacsim 환경(torch 2.7.0)에서 로드하려고 학습 venv 도 2.7.0 으로 고정"
+}
