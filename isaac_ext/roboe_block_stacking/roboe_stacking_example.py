@@ -50,13 +50,14 @@ MODEL_META = REPO_ROOT / "models" / "model_meta.json"
 # 근거: Isaac Sim 렌더와 GPU 를 공유하면 추론이 ~27ms 걸린다(단독 2.2ms). 10Hz면 예산의 27%.
 PERCEPTION_EVERY_N_STEPS = 6
 
-# 뷰포트 마커 색 (인식된 클래스별)
-MARKER_COLORS = {
-    "red_cube": (1.0, 0.2, 0.2, 1.0),
-    "yellow_cube": (1.0, 1.0, 0.2, 1.0),
-    "green_cube": (0.5, 1.0, 0.2, 1.0),
-    "blue_cube": (0.3, 0.4, 1.0, 1.0),
-}
+# 뷰포트 마커 색 - **반드시 중립색이어야 한다** (자기 관측 오염 방지).
+# 처음엔 클래스별 큐브 색으로 그렸는데, debug_draw 점이 ZED 카메라 render product 에도
+# 렌더링되어 YOLO 가 자기 마커를 큐브로 오검출했다 (실측: 빈 씬에서 노란 점이
+# yellow_cube score 0.93). est 가 마커를 쫓고 마커는 belief 위에 그려지므로
+# **자기 꼬리를 쫓는 표류 루프**가 생겨, 배치된 블록의 belief 가 탑 밖으로 끌려나갔다.
+# 흰/회백은 학습 데이터에서 배경(격자선·로봇·표식판)이던 색이라 검출되지 않는다.
+GHOST_MARKER_COLOR = (1.0, 1.0, 1.0, 1.0)   # 큰 점 = belief (로봇이 믿는 위치)
+EST_MARKER_COLOR = (0.6, 0.6, 0.6, 1.0)     # 작은 점 = 이번 프레임 원시 인식
 BLOCK_TO_CLASS = {"RedCube": "red_cube", "YellowCube": "yellow_cube",
                   "GreenCube": "green_cube", "BlueCube": "blue_cube"}
 
@@ -289,14 +290,13 @@ class RoboeBlockStacking(CortexBase):
 
         for cls, p in estimates.items():
             pts.append((float(p[0]), float(p[1]), float(p[2]) + 0.05))
-            colors.append(MARKER_COLORS.get(cls, (1.0, 1.0, 1.0, 1.0)))
+            colors.append(EST_MARKER_COLOR)
             sizes.append(8)
 
         for name, ghost in self.belief_cubes.items():
-            cls = BLOCK_TO_CLASS.get(name)
             p, _ = ghost.get_world_pose()
             pts.append((float(p[0]), float(p[1]), float(p[2]) + 0.09))
-            colors.append(MARKER_COLORS.get(cls, (1.0, 1.0, 1.0, 1.0)))
+            colors.append(GHOST_MARKER_COLOR)
             sizes.append(20)
 
         if pts:
