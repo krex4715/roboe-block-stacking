@@ -68,8 +68,14 @@ class CortexPerceptionBridge:
     WORKSPACE_HI = np.array([0.95, 0.60, 0.40])
 
     def __init__(self, min_score=0.5, ema_alpha=0.5, timeout=1.0,
-                 tower_radius=0.12, tower_override=0.10, deadband=0.008,
+                 tower_radius=0.032, tower_override=0.10, deadband=0.008,
                  freeze_radius=0.18, direct_write=True):
+        # tower_radius 는 behavior 의 탑 카운트 기준(block_height/2 = 25.75mm)에 여유를 더한
+        # 값이어야 한다. 처음 0.12 로 넓게 잡았더니 **좀비존**이 생겼다(실측):
+        # 배치가 26~120mm 어긋난 ghost 는 behavior 는 탑으로 안 세는데 bridge 는 보호해서
+        # 교정도 카운트도 안 되고, behavior 는 그 블록을 다시 집으려다 '탑에 너무 가깝다'며
+        # 영구 go_home. 보호 반경을 카운트 기준과 맞추면 좀비존의 ghost 는 인식이 자유롭게
+        # 실제 위치로 교정하고, 그 결과가 탑 안이면 카운트되고 밖이면 다시 집으러 간다.
         self.min_score = float(min_score)
         self.ema_alpha = float(ema_alpha)
         self.timeout = float(timeout)
@@ -199,12 +205,21 @@ class CortexPerceptionBridge:
                     self._held_name = best
                     self.stats["grasp_events"] += 1
         else:
-            if width > self.RELEASE_W:
-                # 놓았다: 고스트는 마지막 부착 위치(= 배치 위치)에 그대로 남긴다.
-                # EMA 잔존값(파지 전 테이블 위치)이 다음 발행에 섞이지 않도록 리셋.
-                # 재획득 창은 아직 열지 않는다 - 팔이 물러난 뒤 tick 에서 arm 된다.
-                self._filtered.pop(self._held_name, None)
-                self._reacquire[self._held_name] = {"armed": False, "until": 0.0}
+            released = width > self.RELEASE_W
+            # 슬립 감지: 부착 중 폭이 그립 창 **아래**로 떨어지면 큐브가 손에서 빠진 것이다
+            # (모서리 파지 -> 미끄러짐). 이때 ghost 를 공중에 남겨두면 로봇이 그 공중 ghost 로
+            # 접근을 반복하고, 그 팔이 실제 큐브를 가려 인식 교정까지 막는 데드락이 된다(실측).
+            slipped = width < self.GRASP_W_LO - 0.004
+            if released or slipped:
+                name = self._held_name
+                self._filtered.pop(name, None)
+                self._reacquire[name] = {"armed": False, "until": 0.0}
+                if slipped and name in blocks:
+                    # 빠진 큐브는 물리적으로 낙하했다 - ghost 도 지면 높이로 내려 재획득을 돕는다
+                    p_g, q_g = blocks[name].obj.get_world_pose()
+                    p_g = np.asarray(p_g, dtype=float)
+                    p_g[2] = CUBE_HALF
+                    blocks[name].obj.set_world_pose(position=p_g, orientation=q_g)
                 self._held_name = None
                 self._attach_offset = None
 
