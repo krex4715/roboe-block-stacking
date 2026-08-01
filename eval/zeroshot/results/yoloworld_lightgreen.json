@@ -1,0 +1,102 @@
+{
+  "model": "YOLO-World-v2 (s)",
+  "prompts": [
+    "red cube",
+    "yellow cube",
+    "light green cube",
+    "blue cube"
+  ],
+  "n_images": 300,
+  "mAP50": 0.6799,
+  "ap50_per_class": {
+    "red_cube": 0.8063,
+    "yellow_cube": 0.5883,
+    "green_cube": 0.5667,
+    "blue_cube": 0.7582
+  },
+  "operating": {
+    "conf_thr": 0.25,
+    "precision": {
+      "red_cube": null,
+      "yellow_cube": null,
+      "green_cube": 0.8889,
+      "blue_cube": null
+    },
+    "recall": {
+      "red_cube": 0.0,
+      "yellow_cube": 0.0,
+      "green_cube": 0.0268,
+      "blue_cube": 0.0
+    },
+    "confusion_gt_x_pred": [
+      [
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        0,
+        8,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0
+      ]
+    ],
+    "fp_background": {
+      "red_cube": 0,
+      "yellow_cube": 0,
+      "green_cube": 0,
+      "blue_cube": 0
+    },
+    "missed": {
+      "red_cube": 300,
+      "yellow_cube": 299,
+      "green_cube": 291,
+      "blue_cube": 300
+    }
+  },
+  "policy_pick": {
+    "red_cube": {
+      "pick_acc": 0.8233,
+      "wrong_pick": 19,
+      "no_pick": 34,
+      "frames_with_gt": 300
+    },
+    "yellow_cube": {
+      "pick_acc": 0.6033,
+      "wrong_pick": 49,
+      "no_pick": 70,
+      "frames_with_gt": 300
+    },
+    "green_cube": {
+      "pick_acc": 0.5886,
+      "wrong_pick": 112,
+      "no_pick": 11,
+      "frames_with_gt": 299
+    },
+    "blue_cube": {
+      "pick_acc": 0.7733,
+      "wrong_pick": 31,
+      "no_pick": 37,
+      "frames_with_gt": 300
+    },
+    "mean_pick_acc": 0.6971
+  },
+  "latency_ms": {
+    "mean": 12.8,
+    "median": 13.7
+  },
+  "notes": "학습 0. conf=0.001로 전체 곡선 채점, 운영점은 0.25."
+}

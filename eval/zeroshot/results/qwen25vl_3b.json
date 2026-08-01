@@ -1,0 +1,97 @@
+{
+  "model": "Qwen2.5-VL-3B (생성형 VLM)",
+  "prompts": "Detect every small colored cube in this image. There are up to four cubes: red, yellow, green (light green), and blue. Output ONLY a JSON array like [{\"bbox_2d\": [x1, y1, x2, y2], \"label\": \"red cube\"}] with one entry per cube. No other text.",
+  "n_images": 30,
+  "mAP50": 0.8204,
+  "ap50_per_class": {
+    "red_cube": 0.8115,
+    "yellow_cube": 0.9044,
+    "green_cube": 0.7893,
+    "blue_cube": 0.7764
+  },
+  "operating": {
+    "conf_thr": 0.25,
+    "precision": {
+      "red_cube": 0.9615,
+      "yellow_cube": 0.9333,
+      "green_cube": 0.8667,
+      "blue_cube": 0.8571
+    },
+    "recall": {
+      "red_cube": 0.8333,
+      "yellow_cube": 0.9333,
+      "green_cube": 0.8667,
+      "blue_cube": 0.8
+    },
+    "confusion_gt_x_pred": [
+      [
+        25,
+        0,
+        0,
+        1
+      ],
+      [
+        0,
+        28,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        26,
+        0
+      ],
+      [
+        0,
+        1,
+        1,
+        24
+      ]
+    ],
+    "fp_background": {
+      "red_cube": 1,
+      "yellow_cube": 1,
+      "green_cube": 3,
+      "blue_cube": 3
+    },
+    "missed": {
+      "red_cube": 4,
+      "yellow_cube": 2,
+      "green_cube": 4,
+      "blue_cube": 4
+    }
+  },
+  "policy_pick": {
+    "red_cube": {
+      "pick_acc": 0.8333,
+      "wrong_pick": 1,
+      "no_pick": 4,
+      "frames_with_gt": 30
+    },
+    "yellow_cube": {
+      "pick_acc": 0.9333,
+      "wrong_pick": 2,
+      "no_pick": 0,
+      "frames_with_gt": 30
+    },
+    "green_cube": {
+      "pick_acc": 0.8667,
+      "wrong_pick": 3,
+      "no_pick": 1,
+      "frames_with_gt": 30
+    },
+    "blue_cube": {
+      "pick_acc": 0.8333,
+      "wrong_pick": 3,
+      "no_pick": 2,
+      "frames_with_gt": 30
+    },
+    "mean_pick_acc": 0.8667
+  },
+  "latency_ms": {
+    "mean": 3852.3,
+    "median": 3987.7
+  },
+  "notes": "서브셋 30장(stride 10). bf16, greedy. conf 미제공 -> 1.0 고정이므로 AP보다 정밀/재현이 본질 지표."
+}

@@ -1,0 +1,9 @@
+# [ROBOE] eval/zeroshot 전용 추가 의존성 - training/.venv 위에 얹어 설치한다.
+#
+# isaacsim 환경에는 설치하지 않는다(원칙: isaacsim 환경 신규 패키지 0 유지).
+# zero-shot 비교는 전부 오프라인(캡처된 val 이미지)이므로 시뮬레이터가 필요 없다.
+#
+# 설치: training/.venv/bin/pip install -r eval/zeroshot/requirements-extra.txt
+transformers>=4.49   # Grounding DINO + Qwen2.5-VL 로더
+accelerate           # device_map 기반 GPU 배치
+qwen-vl-utils        # Qwen 이미지 전처리(스마트 리사이즈)

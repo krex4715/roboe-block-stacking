@@ -1,0 +1,97 @@
+{
+  "model": "YOLOv8n 파인튜닝 (SDG 2800장)",
+  "prompts": "(폐쇄셋 - 프롬프트 없음)",
+  "n_images": 300,
+  "mAP50": 0.9991,
+  "ap50_per_class": {
+    "red_cube": 1.0,
+    "yellow_cube": 0.9963,
+    "green_cube": 1.0,
+    "blue_cube": 1.0
+  },
+  "operating": {
+    "conf_thr": 0.25,
+    "precision": {
+      "red_cube": 0.9967,
+      "yellow_cube": 0.9836,
+      "green_cube": 0.9967,
+      "blue_cube": 0.9967
+    },
+    "recall": {
+      "red_cube": 1.0,
+      "yellow_cube": 0.9967,
+      "green_cube": 1.0,
+      "blue_cube": 1.0
+    },
+    "confusion_gt_x_pred": [
+      [
+        300,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        299,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        299,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        300
+      ]
+    ],
+    "fp_background": {
+      "red_cube": 1,
+      "yellow_cube": 5,
+      "green_cube": 1,
+      "blue_cube": 1
+    },
+    "missed": {
+      "red_cube": 0,
+      "yellow_cube": 1,
+      "green_cube": 0,
+      "blue_cube": 0
+    }
+  },
+  "policy_pick": {
+    "red_cube": {
+      "pick_acc": 1.0,
+      "wrong_pick": 0,
+      "no_pick": 0,
+      "frames_with_gt": 300
+    },
+    "yellow_cube": {
+      "pick_acc": 0.9967,
+      "wrong_pick": 1,
+      "no_pick": 0,
+      "frames_with_gt": 300
+    },
+    "green_cube": {
+      "pick_acc": 1.0,
+      "wrong_pick": 0,
+      "no_pick": 0,
+      "frames_with_gt": 299
+    },
+    "blue_cube": {
+      "pick_acc": 1.0,
+      "wrong_pick": 0,
+      "no_pick": 0,
+      "frames_with_gt": 300
+    },
+    "mean_pick_acc": 0.9992
+  },
+  "latency_ms": {
+    "mean": 7.1,
+    "median": 5.6
+  },
+  "notes": "기준선. 학습 해상도 640으로 추론. 학습기 자체 val 수치는 0.9949였음."
+}

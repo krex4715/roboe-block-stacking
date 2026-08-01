@@ -80,7 +80,7 @@ belief 를 의도적으로 틀리게 시작시켜(평균 수십 cm) 인식이 �
 | **YOLOv8n 파인튜닝** ✅ 채택 | 4클래스·고정 시점에 충분한 용량, 추론 수 ms, 합성 데이터로 라벨링 비용 0 |
 | 색 임계처리 (HSV) | 과제의 "AI 모델 활용" 조건 미충족. 조명 변화에 취약 |
 | torchvision Faster R-CNN | 추가 의존성 0이지만 추론 ~10배 느림 → fallback |
-| Zero-shot (Grounding DINO 등) | "연두 vs 노랑" 미세 색 구분의 신뢰성 불확실 |
+| Zero-shot (Grounding DINO 등) | "연두 vs 노랑" 미세 색 구분의 신뢰성 불확실 → **§2.5 에서 실측 검증** (mAP50 0.68~0.88, 연두→노랑 혼동 실재) |
 
 **실시간성이 요구사항**이다: 인식이 시뮬레이션 루프 안에서 돌기 때문에 프레임 예산을
 먹으면 제어 주기에 영향을 준다. 실측: 단독 2.2ms, Isaac Sim 렌더와 GPU 공유 시 27ms
@@ -115,6 +115,52 @@ ultralytics 와의 일치를 증명했다 (33박스 전부 **IoU 1.00000**). tor
 `t = h / max(|uₓ|,|u_y|,|u_z|)` 로 보정하면 **2.4mm** (n=120, p95 4.2mm).
 오차 분해: 기하 체인 0.8mm(픽셀 양자화) + 검출기 1.6mm(실루엣 중심 편차).
 그림: `media/figures/ablation_depth_correction.png`
+
+### 2.5 확장 — zero-shot 대안 실측 비교 (open-vocabulary / VLM)
+
+§2.1 의 기각 사유를 가정으로 남기지 않고, **학습 0·프롬프트만으로** 검출하는 세 계열을
+채택 모델과 **같은 val 300장, 같은 채점기**(`eval/zeroshot/common.py`)로 실측했다.
+인식기는 "RGB → 클래스+박스" 생산자 자리 하나이므로(3D 추정·브리지·행동 계층 무수정)
+그대로 갈아끼워 비교할 수 있다 — 파이프라인 모듈성의 검증이기도 하다.
+
+| 모델 | 방식 | mAP50 | pick 정확도* | 지연/장 |
+|---|---|---|---|---|
+| **YOLOv8n fine-tuned (SDG)** ✅ 채택 | 폐쇄셋 학습 | **0.999** | **0.999** | **7 ms** |
+| Grounding DINO (tiny) | zero-shot open-vocab | 0.878 | 0.873 | 177 ms |
+| Qwen2.5-VL-3B | zero-shot 생성형 VLM | 0.820† | 0.867† | 3,852 ms |
+| YOLO-World v2 (s) | zero-shot open-vocab (실시간) | 0.680 | 0.697 | 13 ms |
+
+(\*) pick 정확도 = 브리지 정책(클래스별 최고 신뢰도 1개 픽)이 실제 그 색 큐브에 맞은
+프레임 비율 — 스태킹 성공을 가장 직접 예측하는 지표. (†) 장당 ~4s 라 서브셋 30장.
+
+실측이 말해주는 것 (그림 `media/figures/zeroshot_compare.png`):
+
+- **연두가 실제 급소다**: Grounding DINO 는 연두 GT 를 "yellow" 로 **67회** 오분류
+  (yellow/green AP 0.77/0.81). §2.1 의 기각 사유가 수치로 확인됐다.
+- **프롬프트가 곧 하이퍼파라미터**: YOLO-World 는 연두를 "green cube" 로 부르면
+  mAP50 0.525, "light green cube" 로 부르면 0.680 — 학습 대신 프롬프트를 튜닝하게 된다.
+- **신뢰도 보정 부재**: zero-shot 계열은 conf 0.25 게이트에서 검출이 거의 전멸한다
+  (순위 능력과 별개). 고정 게이트 브리지에 그대로 꽂을 수 없고 게이트 재설계가 필요.
+- **생성형 VLM 은 색 판단이 가장 깨끗**(Qwen 혼동 3/120)하지만 박스가 느슨하고
+  ~4 s/장 — 10 Hz 제어 루프가 아니라 오프라인 분석용 프로필이다.
+
+**결론 — 대체가 아니라 역할 분담.** 폐쇄셋·10 Hz 루프인 본 과제의 runtime 은 파인튜닝
+소형 모델이 맞다. zero-shot 계열의 자리는 (1) 신규 객체 프로토타이핑, (2) **실환경
+auto-labeling(교사) → 소형 모델 증류(학생)** 파이프라인이다. 본 과제는 시뮬레이터
+GT(Replicator)가 교사 역할을 했지만, GT 가 없는 실환경에서는 zero-shot 이 그 자리를
+채운다 — 즉 두 접근은 경쟁 관계가 아니라 한 파이프라인의 두 단계다.
+
+재현 (학습 venv 위에 추가 의존성만 설치, isaacsim 환경 무관):
+
+```bash
+training/.venv/bin/pip install -r eval/zeroshot/requirements-extra.txt
+cd training
+.venv/bin/python ../eval/zeroshot/run_finetuned.py   # 기준선 재채점 (동일 채점기)
+.venv/bin/python ../eval/zeroshot/run_yoloworld.py   # + CLIP 가중치 자동 다운로드
+.venv/bin/python ../eval/zeroshot/run_gdino.py       # ~700MB 다운로드
+.venv/bin/python ../eval/zeroshot/run_qwen.py        # ~7GB 다운로드, 서브셋 30장
+.venv/bin/python ../eval/zeroshot/summarize.py       # 비교표 + 그림 생성
+```
 
 ## 3. 검증 결과
 

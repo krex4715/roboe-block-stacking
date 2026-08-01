@@ -1,0 +1,97 @@
+{
+  "model": "Grounding DINO (tiny)",
+  "prompts": "a red cube. a yellow cube. a green cube. a blue cube.",
+  "n_images": 300,
+  "mAP50": 0.8781,
+  "ap50_per_class": {
+    "red_cube": 0.9597,
+    "yellow_cube": 0.7701,
+    "green_cube": 0.8117,
+    "blue_cube": 0.9709
+  },
+  "operating": {
+    "conf_thr": 0.25,
+    "precision": {
+      "red_cube": 0.366,
+      "yellow_cube": 0.2821,
+      "green_cube": 0.3277,
+      "blue_cube": 0.9231
+    },
+    "recall": {
+      "red_cube": 0.97,
+      "yellow_cube": 0.9233,
+      "green_cube": 0.709,
+      "blue_cube": 0.96
+    },
+    "confusion_gt_x_pred": [
+      [
+        291,
+        0,
+        0,
+        1
+      ],
+      [
+        5,
+        277,
+        0,
+        1
+      ],
+      [
+        4,
+        67,
+        212,
+        0
+      ],
+      [
+        2,
+        0,
+        3,
+        288
+      ]
+    ],
+    "fp_background": {
+      "red_cube": 493,
+      "yellow_cube": 638,
+      "green_cube": 432,
+      "blue_cube": 22
+    },
+    "missed": {
+      "red_cube": 8,
+      "yellow_cube": 17,
+      "green_cube": 16,
+      "blue_cube": 7
+    }
+  },
+  "policy_pick": {
+    "red_cube": {
+      "pick_acc": 0.9433,
+      "wrong_pick": 17,
+      "no_pick": 0,
+      "frames_with_gt": 300
+    },
+    "yellow_cube": {
+      "pick_acc": 0.7667,
+      "wrong_pick": 70,
+      "no_pick": 0,
+      "frames_with_gt": 300
+    },
+    "green_cube": {
+      "pick_acc": 0.8261,
+      "wrong_pick": 35,
+      "no_pick": 17,
+      "frames_with_gt": 299
+    },
+    "blue_cube": {
+      "pick_acc": 0.9567,
+      "wrong_pick": 11,
+      "no_pick": 2,
+      "frames_with_gt": 300
+    },
+    "mean_pick_acc": 0.8732
+  },
+  "latency_ms": {
+    "mean": 176.6,
+    "median": 176.0
+  },
+  "notes": "fp32. threshold=0.10으로 곡선 채점, 운영점 0.25. 색 키워드 없는 매칭 조각은 제외."
+}
