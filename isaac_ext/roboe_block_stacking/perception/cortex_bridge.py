@@ -89,7 +89,7 @@ class CortexPerceptionBridge:
         self._filtered = {}
         self.stats = {"published": 0, "gated_score": 0, "gated_tower": 0,
                       "override": 0, "attached": 0, "deadband": 0, "frozen": 0, "grasp_events": 0,
-                      "gated_workspace": 0, "snapped": 0, "reacquired": 0}
+                      "gated_workspace": 0, "snapped": 0, "reacquired": 0, "snap_cooldown": 0}
         self.last_reasons = {}
 
         self._held_name = None
@@ -103,7 +103,13 @@ class CortexPerceptionBridge:
         # - 유령 검출은 위치가 튀므로 일관성 요구가 필터가 된다.
         self.JUMP_SNAP = 0.05      # 이보다 큰 불일치는 점프로 취급
         self.JUMP_CONSIST = 0.03   # 연속 두 관측이 이 안이면 일관
+        # 스냅 쿨다운: 배치 평가 실측에서 실패 런의 스냅이 173~454회로 폭주했다.
+        # 팔이 정지 자세로 가린 동안 오검이 '일관되게' 같은 곳을 가리키면 2연속 필터를
+        # 통과해 진짜<->오검 사이를 진동하며 접근 목표를 계속 흔든다. 스냅 후 일정 시간
+        # 재스냅을 금지하면 진동이 끊기고 그 사이 접근/파지가 수렴한다.
+        self.SNAP_COOLDOWN = 1.5
         self._pending_jump = {}
+        self._last_snap_t = {}
 
         # 배치 후 재획득 창: 놓은 블록의 물리가 빗나가 떨어져도 고스트는 detach 위치(탑)에
         # 남는다. 탑보호(무예외)가 그 잘못된 belief 를 고착시키지 않도록, **팔이 물러난 뒤**
@@ -132,6 +138,7 @@ class CortexPerceptionBridge:
         self._settle_count = 0
         self._pending_jump.clear()
         self._reacquire.clear()
+        self._last_snap_t.clear()
         for k in self.stats:
             self.stats[k] = 0
 
@@ -315,12 +322,17 @@ class CortexPerceptionBridge:
             # 수렴이 안 끝나 30~40mm 오차로 파지가 빗나간다(배치 평가 실측).
             # 2연속 일관 관측이면 즉시 스냅 - 유령 검출은 위치가 튀어 일관성 필터에 걸린다.
             if raw_dis > self.JUMP_SNAP:
+                if now - self._last_snap_t.get(name, 0.0) < self.SNAP_COOLDOWN:
+                    self.stats["snap_cooldown"] += 1
+                    self.last_reasons[name] = "스냅 쿨다운 -> 유지"
+                    continue
                 pend = self._pending_jump.get(name)
                 if pend is not None and float(np.linalg.norm(pend - p_arr)) < self.JUMP_CONSIST:
                     self._filtered[name] = p_arr.copy()
                     self._pending_jump.pop(name, None)
                     p_f = p_arr.copy()
                     self.stats["snapped"] += 1
+                    self._last_snap_t[name] = now
                 else:
                     self._pending_jump[name] = p_arr.copy()
                     self.last_reasons[name] = f"점프 {raw_dis*100:.0f}cm -> 일관 확인 대기"

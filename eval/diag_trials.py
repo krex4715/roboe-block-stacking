@@ -106,6 +106,18 @@ def main():
             if step % 1500 == 0 and step:
                 stack = " > ".join(str(e) for e in sample.decider_network._decider_state.stack)
                 st = sample.bridge.stats
+                # 배치 정체(go_target(False)) 원인 규명용: EE vs 목표, 장애물 상태
+                try:
+                    ee = np.asarray(sample.robot.arm.get_fk_p())
+                    tgt = ctx.placement_target_eff_T
+                    tgt_s = np.round(tgt[:3, 3], 3) if tgt is not None else None
+                    obs = {n: b.collision_avoidance_enabled for n, b in ctx.blocks.items()}
+                    grip = getattr(ctx, "in_gripper", None)
+                    print(f"      EE={np.round(ee,3)} 배치목표={tgt_s} "
+                          f"in_gripper={grip.name if grip else None} 장애물on={[n for n,v in obs.items() if v]}",
+                          flush=True)
+                except Exception as exc:
+                    print(f"      (계측 실패: {exc})", flush=True)
                 print(f"  [step {step:4d}] 탑={ctx.block_tower.height} 파지={st['grasp_events']} "
                       f"발행={st['published']} 스냅={st['snapped']} 재획득={st['reacquired']} "
                       f"동결={st['frozen']}\n      스택: {stack[:150]}", flush=True)

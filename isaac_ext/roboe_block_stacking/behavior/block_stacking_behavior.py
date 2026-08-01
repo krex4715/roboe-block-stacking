@@ -542,6 +542,26 @@ class BuildTowerContext(DfRobotApiContext):
 
                     traceback.print_exc()
 
+        # [ROBOE] 경로 상 블록의 국소최소 정체 방지.
+        # 스톡 조건(위)은 '타겟 근처' 블록만 척력을 꺼준다. 그러나 랜덤 배치에서는 운반/접근
+        # 경로 **중간**에 다른 블록이 놓일 수 있고, 그 척력과 목표 인력이 균형을 이뤄
+        # EE 가 영구 정지한다 (실측: 배치 평가 3/10 트라이얼, EE 가 두 계측 사이 1mm 도
+        # 안 움직임). 탑 멤버가 아닌 블록이 EE 바로 근처면 척력을 끈다 - 스치더라도
+        # 인식이 재획득해 복구 가능하지만, 정체는 영구 실패이기 때문.
+        in_tower_names = set(b.name for b in self.block_tower.stack)
+        for name, block in self.blocks.items():
+            if name in in_tower_names or block in blocks_to_suppress:
+                continue
+            block_p, _ = block.obj.get_world_pose()
+            if np.linalg.norm(block_p[:2] - eff_p[:2]) < 0.20:
+                blocks_to_suppress.append(block)
+                if block.collision_avoidance_enabled:
+                    try:
+                        arm.disable_obstacle(block.obj)
+                        block.collision_avoidance_enabled = False
+                    except Exception:
+                        pass
+
         for name, block in self.blocks.items():
             if block not in blocks_to_suppress:
                 if not block.collision_avoidance_enabled:
