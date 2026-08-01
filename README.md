@@ -150,15 +150,18 @@ auto-labeling(교사) → 소형 모델 증류(학생)** 파이프라인이다. 
 GT(Replicator)가 교사 역할을 했지만, GT 가 없는 실환경에서는 zero-shot 이 그 자리를
 채운다 — 즉 두 접근은 경쟁 관계가 아니라 한 파이프라인의 두 단계다.
 
-**라이브 통합 (GUI "인식 소스" 드롭다운, §4.1).** 오프라인 비교에 그치지 않고 세 백엔드를
-실제 제어 루프에 꽂아 실행 중 전환할 수 있게 했다 — 검출기는 생산자 자리 하나라는 구조
-주장의 실연이다. 헤드리스 실증: **Grounding DINO(zero-shot)만으로 스태킹 완주**
+**라이브 통합 (GUI "인식 소스" 드롭다운, §4.1).** 오프라인 비교에 그치지 않고 네 백엔드
+전부를 실제 제어 루프에 꽂아 실행 중 전환할 수 있게 했다 — 검출기는 생산자 자리 하나라는
+구조 주장의 실연이다. 헤드리스 실증: **Grounding DINO(zero-shot)만으로 스태킹 완주**
 (기본 스폰, 빨→노→연→파, 시뮬 25.5 s; GPU 를 렌더와 나눠 쓰며 추론 234~321 ms,
 비동기 실효 2.4~2.9 Hz). 저속 인식을 우편함(mailbox) 방식으로 붙여도 완주된다는 것은
 ghost belief 구조가 인식 지연에 강건하다는 설계 주장의 직접 증거다. 반면 YOLO-World 는
 같은 씬에서 프레임당 0~3개(점수 ~0.01)로 흔들린다 — 오프라인 pick 정확도 0.70 이
 라이브에서 그대로 재현되는 것으로, 게이트로 걸러낼 수 없는 보정 붕괴(위 셋째 발견)의
-실물이다.
+실물이다. 생성형 VLM(Qwen2.5-VL-3B)도 같은 워커 패턴으로 편입했다: 신뢰도가 없어
+0.99 고정으로 발행하고(보호는 bridge 안전장치 전담), 보정이 ~0.2 Hz 로 오는 것이
+정상이며 VRAM ~7 GB 를 상주 점유한다 — 그래서 허브는 백엔드 전환 시 이전 워커를
+먼저 내려 VRAM 을 순차 점유한다 (16 GB 카드 실측 제약).
 
 재현 (학습 venv 위에 추가 의존성만 설치, isaacsim 환경 무관):
 
@@ -271,10 +274,11 @@ UI 기능:
 - **Depth 보정 모드** (none 으로 바꾸면 추정이 3cm 치우침), **Belief 구조**(ghost/direct),
   **Perception 패널**(검출·3D좌표·yaw·지연·bridge 판정 실시간)
 - **인식 소스** — §2.5 zero-shot 비교의 라이브 연장. 실행 중 드롭다운으로
-  파인튜닝 YOLO / YOLO-World(zero-shot) / Grounding DINO(zero-shot) 를 갈아끼운다.
-  bridge 게이트가 백엔드의 신뢰도 보정에 맞춰 자동 전환(0.5/0.003/0.25)되고 검출 뷰
-  창에 현재 소스가 표기된다. Grounding DINO 는 학습 venv 를 서브프로세스 워커로 빌려
-  isaacsim 환경 무오염 원칙을 유지한다 (`perception/detector_hub.py` 주석).
+  파인튜닝 YOLO / YOLO-World / Grounding DINO / Qwen2.5-VL(생성형 VLM) 을 갈아끼운다.
+  bridge 게이트가 백엔드의 신뢰도 보정에 맞춰 자동 전환(0.5 / 0.003 / 0.25 / 고정점수)
+  되고 검출 뷰 창에 현재 소스가 표기된다. GDINO/Qwen 은 학습 venv 를 서브프로세스
+  워커로 빌려 isaacsim 환경 무오염 원칙을 유지하며(`perception/detector_hub.py` 주석),
+  전환 시 이전 워커를 먼저 내려 VRAM 을 순차 점유한다(Qwen ~7GB).
   YOLO-World 는 TorchScript 재생성이 필요하다(657MB 라 git 미포함):
   `training/.venv/bin/python training/export_yoloworld.py`
 

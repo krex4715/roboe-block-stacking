@@ -63,6 +63,17 @@ BACKENDS = {
         "bridge_min_score": 0.25,
         "hint": "학습 venv 필요: training/.venv + eval/zeroshot/requirements-extra.txt",
     },
+    "qwen": {
+        "label": "Qwen2.5-VL-3B 생성형 VLM (0.82 · ~5s 비동기)",
+        "short": "Qwen2.5-VL-3B (VLM)",
+        "kind": "worker",
+        "script": "isaac_ext/roboe_block_stacking/perception/qwen_worker.py",
+        "python": "training/.venv/bin/python",
+        # 생성형 출력엔 신뢰도가 없어 워커가 0.99 고정으로 내보낸다 -> 게이트 무의미.
+        # 보호는 bridge 의 작업공간/일관성/동결 장치가 전담한다 (qwen_worker.py 주석).
+        "bridge_min_score": 0.5,
+        "hint": "학습 venv 필요 + VRAM ~7GB 상주. 보정이 ~0.2Hz 로 오는 것이 정상",
+    },
 }
 
 # GUI 드롭다운 항목 ("키 | 라벨" 형식 - 확장 쪽은 앞 토큰만 파싱한다)
@@ -77,7 +88,7 @@ class _WorkerClient:
     """서브프로세스 검출 워커의 비동기 클라이언트 (단일 미결 요청 프로토콜)."""
 
     def __init__(self, python_path, script_path):
-        self.log_path = Path(tempfile.gettempdir()) / "roboe_gdino_worker.log"
+        self.log_path = Path(tempfile.gettempdir()) / f"roboe_{Path(script_path).stem}.log"
         self._log_f = open(self.log_path, "w")
         self.proc = subprocess.Popen(
             [str(python_path), str(script_path)],
@@ -182,6 +193,11 @@ class DetectorHub:
                 return f"모델 없음: {cfg['model']}\n-> {hint}" if hint else f"모델 없음: {cfg['model']}"
             meta_path = self.repo_root / cfg.get("meta", "")
             meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
+            # 이전 워커를 **먼저** 내린다: VLM 워커(~7GB)가 남은 채 새 모델을 GPU 에
+            # 올리면 16GB 카드에서 OOM 이 난다 (실측 - VRAM 은 순차 점유가 원칙).
+            # 이후 로드가 실패하면 백엔드 없음 상태가 되지만 detect() 가 빈 결과를
+            # 돌려줄 뿐 루프는 안전하다.
+            self._stop_worker()
             try:
                 det = CubeDetector(
                     str(model_path),
@@ -192,7 +208,6 @@ class DetectorHub:
             except Exception as exc:
                 carb.log_warn(f"[ROBOE] 검출기 로드 실패({key}): {exc}")
                 return f"검출기 로드 실패: {exc}"
-            self._stop_worker()
             self.active_detector = det
             self.bridge_min_score = float(meta.get("bridge_min_score", cfg["bridge_min_score"]))
             self.mode_note = ""
