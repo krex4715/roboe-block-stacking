@@ -1,0 +1,23 @@
+{
+  "class_names": [
+    "red_cube",
+    "yellow_cube",
+    "green_cube",
+    "blue_cube"
+  ],
+  "prompts": [
+    "red cube",
+    "yellow cube",
+    "light green cube",
+    "blue cube"
+  ],
+  "imgsz": 1280,
+  "conf": 0.003,
+  "bridge_min_score": 0.003,
+  "source": "yolov8s-worldv2 + set_classes (zero-shot - 학습 0, 어휘만 지정)",
+  "offline_eval": {
+    "mAP50": 0.6799,
+    "mean_pick_acc": 0.6971,
+    "note": "eval/zeroshot/results/yoloworld_lightgreen.json"
+  }
+}

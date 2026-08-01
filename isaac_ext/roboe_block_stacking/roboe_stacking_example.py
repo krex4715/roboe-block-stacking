@@ -11,7 +11,6 @@
 #   - M6: 뷰포트 3D 마커 제거 (자기관측 오염 - 아래 주석), 정체 감시자, 배치 평가
 
 import gc
-import json
 from pathlib import Path
 
 import carb
@@ -30,6 +29,8 @@ from isaacsim.examples.interactive.cortex.cortex_base import CortexBase
 
 # [ROBOE] 씬/비전 공통 모듈. 상대 import 라 GUI 확장 경로와 standalone 양쪽에서 동작한다.
 from .perception.cortex_bridge import CortexPerceptionBridge
+from .perception.detector import select_best_per_class
+from .perception.detector_hub import DetectorHub
 from .perception.estimator_3d import (
     backproject_pixels,
     clamp_to_support,
@@ -43,9 +44,8 @@ from .scene_setup import add_belief_cubes, add_cubes, add_lighting, add_tower_ma
 DEFAULT_TOWER_POSITION = np.array([0.25, 0.30, 0.0])
 
 # 저장소 루트 (심링크를 풀어 실제 경로 기준으로 계산)
+# 모델 경로/게이트 등 검출기별 명세는 perception/detector_hub.py 의 BACKENDS 가 갖는다.
 REPO_ROOT = Path(__file__).resolve().parents[2]
-MODEL_PATH = REPO_ROOT / "models" / "best.torchscript"
-MODEL_META = REPO_ROOT / "models" / "model_meta.json"
 
 # 물리 60Hz 기준. 6스텝마다 = 10Hz 로 인식을 돌린다.
 # 근거: Isaac Sim 렌더와 GPU 를 공유하면 추론이 ~27ms 걸린다(단독 2.2ms). 10Hz면 예산의 27%.
@@ -86,7 +86,12 @@ class RoboeBlockStacking(CortexBase):
         self.zed = None
 
         # [ROBOE] 인식 파이프라인 상태
+        # detector_hub 가 "RGB -> 클래스+박스" 생산자를 관리한다 (README §2.5 라이브 연장).
+        # self.detector 는 하위호환용 별칭(torchscript 백엔드의 CubeDetector, 검증 스크립트가
+        # 로드 여부 확인에 씀). 기본 백엔드 "finetuned" 는 기존과 완전히 같은 경로다.
         self.detector = None
+        self.detector_hub = None
+        self.detector_backend = "finetuned"
         self.perception_enabled = True
         self.last_estimates = {}       # {클래스: 추정 3D 위치}
         self.last_detections = []      # 원시 검출 (검출 뷰/데모 레코더가 소비)
@@ -179,42 +184,32 @@ class RoboeBlockStacking(CortexBase):
 
     # ------------------------------------------------------- [ROBOE] 인식 루프
     def _load_detector(self):
-        """TorchScript 검출기를 로드한다. 모델이 없으면 인식 없이 GT 로 동작한다."""
-        if self.detector is not None:
-            return
-        if not MODEL_PATH.exists():
-            self._report_perception(f"모델 없음: {MODEL_PATH}\n"
-                                    "-> training/train.py 를 먼저 실행하세요. "
-                                    "(지금은 인식 없이 ground truth 로 동작합니다)")
-            return
-        try:
-            from .perception.detector import CubeDetector
+        """인식 소스 허브를 만들고 현재 선택된 백엔드를 로드한다.
 
-            meta = json.loads(MODEL_META.read_text()) if MODEL_META.exists() else {}
-            names = meta.get("class_names", ["red_cube", "yellow_cube", "green_cube", "blue_cube"])
-            self.detector = CubeDetector(str(MODEL_PATH), names,
-                                         imgsz=int(meta.get("imgsz", 640)), conf=0.5)
-            m50 = meta.get("mAP50")
-            self._report_perception(f"검출기 로드 완료: {MODEL_PATH.name}\n"
-                                    f"클래스: {', '.join(names)}\n"
-                                    f"val mAP50 = {m50:.4f}\n\n"
-                                    "Start 를 누르면 인식이 시작됩니다."
-                                    if isinstance(m50, float) else
-                                    f"검출기 로드 완료: {MODEL_PATH.name}\n\nStart 를 누르세요.")
-        except Exception as exc:
-            carb.log_warn(f"[ROBOE] 검출기 로드 실패: {exc}")
-            self._report_perception(f"검출기 로드 실패: {exc}")
+        기본(finetuned)은 종전과 같은 TorchScript 경로/인자다. 모델이 없으면 인식 없이
+        GT 로 동작한다. zero-shot 백엔드(yoloworld/gdino)는 UI 에서 선택했을 때만 로드된다."""
+        if self.detector_hub is None:
+            self.detector_hub = DetectorHub(REPO_ROOT)
+        msg = self.detector_hub.select(self.detector_backend)
+        self.detector = self.detector_hub.active_detector  # 하위호환 별칭
+        self.bridge.min_score = self.detector_hub.bridge_min_score
+        if self.detector_hub.current_key is None:
+            self._report_perception(f"{msg}\n"
+                                    "(지금은 인식 없이 ground truth 로 동작합니다)")
+        else:
+            self._report_perception(f"{msg}\n\nStart 를 누르면 인식이 시작됩니다.")
 
     def _run_perception(self):
-        """RGB-D 취득 -> YOLO 검출 -> 3D 위치 추정 -> 검출 뷰 창 + UI 텍스트."""
-        if self.detector is None or self.zed is None or self.zed.camera is None:
+        """RGB-D 취득 -> 검출(선택된 소스) -> 3D 위치 추정 -> 검출 뷰 창 + UI 텍스트."""
+        if (self.detector_hub is None or self.detector_hub.current_key is None
+                or self.zed is None or self.zed.camera is None):
             return
         rgb, depth = self.zed.capture()
         if rgb is None or depth is None:
             return
 
-        detections = self.detector(rgb)
-        best = self.detector.best_per_class(detections)
+        detections = self.detector_hub.detect(rgb)
+        best = select_best_per_class(detections)
         self.last_detections = detections  # 외부 소비자(검출 뷰/데모 레코더)용
         if self.enable_detection_view:
             self._update_detection_view(rgb, detections, best)
@@ -260,9 +255,11 @@ class RoboeBlockStacking(CortexBase):
                 if reason != "발행":
                     bridge_line += f"\n  {name:11s} {reason}"
 
-        header = (f"검출 {len(best)}/4   추론 {self.detector.last_latency_ms:.1f} ms   "
+        hub = self.detector_hub
+        header = (f"검출 {len(best)}/4   추론 {hub.last_latency_ms:.1f} ms{hub.mode_note}   "
                   f"@ {60.0/PERCEPTION_EVERY_N_STEPS:.0f} Hz   보정={self.correction_mode}   "
-                  f"belief={self.belief_mode}\n" + "-" * 52)
+                  f"belief={self.belief_mode}\n"
+                  f"소스: {hub.current_label} (게이트 {self.bridge.min_score:g})\n" + "-" * 52)
         self._report_perception(header + "\n" + ("\n".join(lines) if lines else "(검출 없음)")
                                 + bridge_line)
 
@@ -291,6 +288,11 @@ class RoboeBlockStacking(CortexBase):
                                          fill_policy=ui.IwpFillPolicy.IWP_PRESERVE_ASPECT_FIT)
 
             img = np.ascontiguousarray(rgb[..., :3]).copy()
+            # 현재 인식 소스 표기 (ASCII 만 - cv2.putText 는 한글을 못 그린다)
+            if self.detector_hub is not None:
+                cv2.putText(img, f"source: {self.detector_hub.current_short}",
+                            (14, img.shape[0] - 16), cv2.FONT_HERSHEY_SIMPLEX,
+                            0.7, (255, 255, 255), 2, cv2.LINE_AA)
             best_boxes = {id(d) for d in best.values()}
             for d in detections:
                 x0, y0, x1, y1 = (int(v) for v in d["box"])
@@ -366,6 +368,21 @@ class RoboeBlockStacking(CortexBase):
         """belief 구조 전환. 씬 구성이 달라지므로 다음 LOAD 부터 적용된다."""
         if mode in ("ghost", "direct"):
             self.belief_mode = mode
+
+    def set_detector_backend(self, key: str):
+        """인식 소스(검출기 백엔드) 전환 - README §2.5 오프라인 비교의 라이브 연장.
+
+        실행 중에도 안전하다: bridge 는 게이트만 새 모델의 신뢰도 보정에 맞추고
+        추정 필터를 비우며(서로 다른 보정의 관측을 한 필터에 섞지 않기 위해),
+        파지 상태는 유지한다 (cortex_bridge.on_detector_changed 주석 참고)."""
+        self.detector_backend = str(key)
+        if self.detector_hub is None:
+            self._report_perception(f"인식 소스 '{key}' 선택됨 - LOAD 하면 적용됩니다.")
+            return
+        msg = self.detector_hub.select(self.detector_backend)
+        self.detector = self.detector_hub.active_detector
+        self.bridge.on_detector_changed(self.detector_hub.bridge_min_score)
+        self._report_perception(msg)
 
     def set_correction_mode(self, mode: str):
         """깊이->큐브중심 보정 방식 전환 (box / ray / none).
@@ -501,6 +518,9 @@ class RoboeBlockStacking(CortexBase):
         self.zed = None
         self.decider_network = None
         self.detector = None
+        if self.detector_hub is not None:  # 워커(서브프로세스)까지 확실히 내린다
+            self.detector_hub.shutdown()
+            self.detector_hub = None
         self.cubes = {}
         self.belief_cubes = {}
         self.bridge.reset()
@@ -512,3 +532,6 @@ class RoboeBlockStacking(CortexBase):
         self.robot = None
         self.zed = None
         self.decider_network = None
+        if self.detector_hub is not None:
+            self.detector_hub.shutdown()
+            self.detector_hub = None

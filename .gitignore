@@ -18,6 +18,10 @@ training/yolo*.pt
 training/*.torchscript
 training/*.onnx
 
+# YOLO-World TorchScript (657MB - CLIP 텍스트 인코더가 그래프에 포함됨).
+# 재생성: training/.venv/bin/python training/export_yoloworld.py (meta 는 커밋됨)
+models/yoloworld_v2s.torchscript
+
 # Python
 __pycache__/
 *.pyc

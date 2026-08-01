@@ -147,6 +147,18 @@ class CortexPerceptionBridge:
         for k in self.stats:
             self.stats[k] = 0
 
+    def on_detector_changed(self, min_score):
+        """인식 소스 교체 시 호출. 게이트를 새 모델의 신뢰도 보정에 맞추고
+        추정 필터(EMA/점프 일관성/재획득)만 비운다 - 서로 다른 보정의 관측을
+        한 필터에 섞으면 안 되기 때문이다. 파지 상태(_held_name 등)는 **유지**한다:
+        라이브 전환이 진행 중인 조작을 끊으면 안 된다 (reset() 과의 차이)."""
+        self.min_score = float(min_score)
+        self._filtered.clear()
+        self._pending_jump.clear()
+        self._reacquire.clear()
+        self._last_snap_t.clear()
+        self.last_reasons.clear()
+
     @staticmethod
     def _ee_pose(robot):
         try:

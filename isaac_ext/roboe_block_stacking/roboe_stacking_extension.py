@@ -21,6 +21,10 @@ from isaacsim.examples.interactive.user_examples.roboe_block_stacking.roboe_stac
     DEFAULT_TOWER_POSITION,
     RoboeBlockStacking,
 )
+from isaacsim.examples.interactive.user_examples.roboe_block_stacking.perception.detector_hub import (
+    DETECTOR_UI_ITEMS,
+    detector_key_from_ui,
+)
 from isaacsim.examples.interactive.user_examples.roboe_block_stacking.scene_setup import validate_tower_position
 from isaacsim.gui.components.ui_utils import (
     btn_builder,
@@ -110,6 +114,14 @@ class RoboeBlockStackingUI(BaseSampleUITemplate):
                     "Belief 구조",
                     items=["ghost (인식이 제어에 반영)", "direct (ground truth 비교군)"],
                     on_clicked_fn=self._on_belief_changed,
+                )
+                # [ROBOE] 인식 소스 - zero-shot 오프라인 비교(README §2.5)의 라이브 연장.
+                # 실행 중 전환 가능. bridge 게이트가 백엔드의 신뢰도 보정에 맞춰 함께
+                # 바뀌고(0.5 / 0.003 / 0.25), 추정 필터만 초기화되며 파지 상태는 유지된다.
+                self.task_ui_elements["Detector"] = dropdown_builder(
+                    "인식 소스",
+                    items=DETECTOR_UI_ITEMS,
+                    on_clicked_fn=self._on_detector_changed,
                 )
                 dict = {
                     "label": "Load World",
@@ -280,6 +292,10 @@ class RoboeBlockStackingUI(BaseSampleUITemplate):
             self._sample.set_belief_mode(mode)
             self.on_perception(f"belief 구조를 '{mode}' 로 바꿨습니다.\n"
                                "씬 구성이 달라지므로 **LOAD 를 다시 눌러야** 적용됩니다.")
+
+    def _on_detector_changed(self, value):
+        if self._sample is not None:
+            self._sample.set_detector_backend(detector_key_from_ui(value))
 
     def build_diagnostic_ui(self):
         with ui.VStack(spacing=5):
