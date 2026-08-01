@@ -176,7 +176,7 @@ pip install "isaacsim[all,extscache]==5.1.0" --extra-index-url https://pypi.nvid
 
 # 2) 추론 런타임 (TorchScript 로드 + NMS 용도. 학습용 ultralytics 는 필요 없다 - §2.3)
 pip install torch==2.7.0 torchvision==0.22.0 --index-url https://download.pytorch.org/whl/cu128
-pip install opencv-python-headless
+pip install opencv-python-headless==4.11.0.86
 
 # 3) 저장소 (위치 자유)
 git clone <저장소> roboe_block_stacking && cd roboe_block_stacking
@@ -221,12 +221,17 @@ UI 기능:
 python standalone/run_stacking_perception.py            # 인식 기반 E2E (M5 게이트)
 python standalone/run_stacking_perception.py --tower 0.45 0.25
 python eval/run_trials.py --trials 10 --record          # 배치 평가 + ZED 시점 영상
+python standalone/record_demo.py                        # 데모 영상 재생성 (media/demo/)
 python standalone/verify_m1_camera.py                   # 기하 체인 검증
 python standalone/verify_m4_perception.py               # 인식 정확도 측정
 python standalone/verify_example_reload.py              # 예제 재로드 회귀 테스트
-python eval/test_decode_math.py                         # 디코드 좌표 단위 테스트
-python eval/benchmark_detector.py --n 200               # 추론 지연 벤치마크
+python eval/test_decode_math.py                         # 디코드 좌표 단위 테스트 (GPU 불필요)
+python eval/benchmark_detector.py --n 200               # 추론 지연 벤치마크 (*)
 ```
+
+(*) 벤치마크만 예외적으로 검증 이미지가 필요하다 — 데이터셋은 용량 문제로 저장소에
+포함하지 않으므로 §4.3 의 `generate_dataset.py` 를 먼저 실행해야 한다.
+나머지 명령은 클린 체크아웃에서 바로 동작한다 (모델 포함, 상대 경로만 사용 — 실증됨).
 
 ### 4.3 데이터 생성 + 학습 (재현)
 
