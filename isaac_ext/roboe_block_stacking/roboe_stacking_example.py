@@ -89,6 +89,7 @@ class RoboeBlockStacking(CortexBase):
         self.detector = None
         self.perception_enabled = True
         self.last_estimates = {}       # {클래스: 추정 3D 위치}
+        self.last_detections = []      # 원시 검출 (검출 뷰/데모 레코더가 소비)
         self._perception_step = 0
         # [ROBOE] YOLO 검출 뷰 창 (extension 이 GUI 에서만 True 로 켠다).
         # 3D 마커와 달리 **캡처된 이미지 위에** 박스를 그려 omni.ui 창에 띄우므로
@@ -214,6 +215,7 @@ class RoboeBlockStacking(CortexBase):
 
         detections = self.detector(rgb)
         best = self.detector.best_per_class(detections)
+        self.last_detections = detections  # 외부 소비자(검출 뷰/데모 레코더)용
         if self.enable_detection_view:
             self._update_detection_view(rgb, detections, best)
 

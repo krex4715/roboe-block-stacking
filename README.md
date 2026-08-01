@@ -158,27 +158,62 @@ ultralytics 와의 일치를 증명했다 (33박스 전부 **IoU 1.00000**). tor
 고정 선호가 만드는 손목-베이스 감김 데드락 — 상세는 커밋 히스토리).
 그림: `media/figures/trials_summary.png`, 원자료: `media/m6/trials.csv`
 
-## 4. 실행 방법
+## 4. 설치와 실행
+
+모든 스크립트는 **저장소 상대 경로**만 사용한다 — 어느 위치에 체크아웃해도 동작하며,
+아래 명령은 전부 저장소 루트에서 실행한다고 가정한다.
+
+### 4.0 설치 (클린 환경 기준, 최초 1회)
+
+**요구 환경**: Ubuntu 22.04+, NVIDIA RTX GPU(개발·검증: RTX 4080 SUPER 16GB) +
+드라이버 550 이상, 디스크 여유 ~60GB, 최초 실행 시 인터넷(Isaac Sim 에셋 다운로드).
+
+```bash
+# 1) Python 3.11 가상환경 + Isaac Sim 5.1 (pip 배포판)
+conda create -n isaacsim python=3.11 -y
+conda activate isaacsim
+pip install "isaacsim[all,extscache]==5.1.0" --extra-index-url https://pypi.nvidia.com
+
+# 2) 추론 런타임 (TorchScript 로드 + NMS 용도. 학습용 ultralytics 는 필요 없다 - §2.3)
+pip install torch==2.7.0 torchvision==0.22.0 --index-url https://download.pytorch.org/whl/cu128
+pip install opencv-python-headless
+
+# 3) 저장소 (위치 자유)
+git clone <저장소> roboe_block_stacking && cd roboe_block_stacking
+
+# 4) 설치 확인 (GPU/Isaac Sim 없이 도는 단위 테스트)
+python eval/test_decode_math.py
+```
+
+- **학습된 모델이 저장소에 포함**되어 있다(`models/best.torchscript`) — 바로 실행 가능.
+  학습 재현은 §4.3(선택).
+- Isaac Sim **최초 실행 시** EULA 동의가 필요하고, ZED-X 등 에셋을 클라우드에서
+  내려받으므로 첫 로드는 수 분 걸릴 수 있다.
 
 ### 4.1 GUI 예제 (권장)
 
 ```bash
 conda activate isaacsim
-# 최초 1회: 예제 등록
-UE=$CONDA_PREFIX/lib/python3.11/site-packages/isaacsim/exts/isaacsim.examples.interactive/isaacsim/examples/interactive/user_examples
-ln -sfn "$PWD/isaac_ext/roboe_block_stacking" "$UE/roboe_block_stacking"
-echo "from isaacsim.examples.interactive.user_examples.roboe_block_stacking import RoboeBlockStackingExtension" >> "$UE/__init__.py"
+# 최초 1회: user_examples 에 등록 (심링크 + import 한 줄. 재실행해도 중복되지 않음)
+UE="$CONDA_PREFIX/lib/python3.11/site-packages/isaacsim/exts/isaacsim.examples.interactive/isaacsim/examples/interactive/user_examples"
+ln -sfn "$(pwd)/isaac_ext/roboe_block_stacking" "$UE/roboe_block_stacking"
+grep -q RoboeBlockStackingExtension "$UE/__init__.py" 2>/dev/null || \
+  echo "from isaacsim.examples.interactive.user_examples.roboe_block_stacking import RoboeBlockStackingExtension" >> "$UE/__init__.py"
 
 isaacsim
 ```
 **Window → Examples → Robotics Examples → Custom → ROBOE Block Stacking**
 → `Tower X/Y` 입력 → `LOAD` → `Start`
 
-UI 기능: Perception On/Off(끄면 로봇이 기본 위치의 고스트로 감 — 인식 의존성을 눈으로 증명),
-Depth 보정 모드 전환(none 으로 바꾸면 추정점이 3cm 튀어나옴), Belief 구조 전환(ghost/direct),
-Perception 패널(검출·3D좌표·yaw·지연·bridge 판정 실시간 — 인식 상태 표시는 전부 이 2D 패널이 담당한다.
-뷰포트 3D 마커는 쓰지 않는다: debug_draw 기하가 ZED 카메라에도 렌더링되어 검출기를 오염시키는
-자기관측 문제를 실측으로 확인하고 제거했다 — "센서가 보는 세계에 디버그를 그리지 않는다").
+UI 기능:
+- **Perception On/Off** — 끄면 로봇이 기본 위치의 고스트로 간다 (인식 의존성을 눈으로 증명)
+- **Randomize Cubes** — 실행 중에도 안전한 라이브 랜덤 재배치 (파지 중/탑 큐브 제외).
+  belief 는 건드리지 않으므로 인식이 재검출로 따라잡는 과정이 그대로 보인다
+- **YOLO 검출 뷰 창** — 검출기가 보는 이미지 + bbox/score 실시간 (캡처 후 주석이라
+  되먹임 불가). 뷰포트 3D 마커는 쓰지 않는다: debug_draw 기하가 ZED 카메라에도
+  렌더링되어 검출기를 오염시키는 자기관측 문제를 실측으로 확인하고 제거했다
+- **Depth 보정 모드** (none 으로 바꾸면 추정이 3cm 치우침), **Belief 구조**(ghost/direct),
+  **Perception 패널**(검출·3D좌표·yaw·지연·bridge 판정 실시간)
 
 ### 4.2 GUI 없이 (검증/평가)
 
