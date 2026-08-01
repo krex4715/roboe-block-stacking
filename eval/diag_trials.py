@@ -104,8 +104,32 @@ def main():
         ctx = sample.decider_network.context
 
         done_at = None
+        try:
+            _lo = sample.robot.dof_properties["lower"][:7]
+            _hi = sample.robot.dof_properties["upper"][:7]
+        except Exception:
+            _lo = _hi = None
         for step in range(args.max_steps):
             world.step(render=True)
+            # [진단] 배치 이동(carry) 중 고밀도 계측 - hover 미수렴 원인 규명용.
+            #   명령목표(arm.target_prim) / d_xy(carry-high 히스테리시스 입력) /
+            #   관절한계 여유 / 척력 억제 목록
+            if step % 120 == 0 and getattr(ctx, "in_gripper", None) is not None \
+                    and ctx.placement_target_eff_T is not None:
+                try:
+                    arm = sample.robot.arm
+                    ee = np.asarray(arm.get_fk_p())
+                    cmd = np.asarray(arm.target_prim.get_world_pose()[0])
+                    pt = ctx.placement_target_eff_T
+                    d_xy = np.linalg.norm(pt[:2, 3] - ee[:2])
+                    q = np.asarray(sample.robot.get_joint_positions())[:7]
+                    marg = (np.round(np.minimum(q - _lo, _hi - q), 2)
+                            if _lo is not None else None)
+                    sup = [n for n, b in ctx.blocks.items() if not b.collision_avoidance_enabled]
+                    print(f"      [carry {step:5d}] EE={np.round(ee,3)} 명령목표={np.round(cmd,3)} "
+                          f"d_xy={d_xy:.3f} 한계여유={marg} 억제={sup}", flush=True)
+                except Exception as exc:
+                    print(f"      [carry {step:5d}] 계측 실패: {exc}", flush=True)
             if step % 1500 == 0 and step:
                 stack = " > ".join(str(e) for e in sample.decider_network._decider_state.stack)
                 st = sample.bridge.stats

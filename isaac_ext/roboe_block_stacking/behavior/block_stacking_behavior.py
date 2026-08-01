@@ -853,14 +853,43 @@ class TablePointValidator:
 
 
 class ReachToPlaceOnTower(DfDecider):
+    # [ROBOE] carry-high 운반 정책.
+    # 배치 평가 실측: 오른쪽(y<-0.25)에서 집어 왼쪽 탑(+0.30)으로 가는 직선 경로가
+    # 로봇 베이스에 r~0.33 으로 근접하고, 그 접선점 (0.32, 0.10, 0.14) 에서 탑 인력과
+    # 베이스 자기충돌 배리어 척력이 평형을 이뤄 RMPFlow 가 정체한다 (4/20 트라이얼 재현,
+    # EE 완전 부동 - 장애물 해제는 무력: 배리어는 등록 장애물이 아닌 로봇 내장 모델).
+    # 대책: 탑 xy 에서 멀 때는 목표 z 를 올려 위로-넘어-내려오는 경로로 만든다
+    # (사람 작업자의 "높이 들고 운반"과 동일). 히스테리시스로 경계 채터링 방지.
+    CARRY_HEIGHT = 0.32   # 4단 탑 상단(~0.21) + 여유. Franka 도달범위 내
+    NEAR_XY = 0.16        # 이 안이면 정상 하강 접근
+    FAR_XY = 0.20         # 이 밖이면 다시 carry-high
+
     def __init__(self):
         super().__init__()
         self.add_child("approach_grasp", DfApproachGrasp())
+        self._carry_high = True
+
+    def enter(self):
+        self._carry_high = True
 
     def decide(self):
         ct = self.context
         ct.placement_target_eff_T = calc_grasp_for_top_of_tower(ct)
-        return DfDecision("approach_grasp", ct.placement_target_eff_T)
+        target_T = ct.placement_target_eff_T
+
+        # [ROBOE] 완료 판정 등이 쓰는 ct.placement_target_eff_T 는 그대로 두고,
+        # approach_grasp 에 내려보내는 사본만 들어올린다.
+        eff_p = ct.robot.arm.get_fk_p()
+        d_xy = np.linalg.norm(target_T[:2, 3] - eff_p[:2])
+        if d_xy < self.NEAR_XY:
+            self._carry_high = False
+        elif d_xy > self.FAR_XY:
+            self._carry_high = True
+        if self._carry_high:
+            target_T = target_T.copy()
+            target_T[2, 3] = max(target_T[2, 3], self.CARRY_HEIGHT)
+
+        return DfDecision("approach_grasp", target_T)
 
     def exit(self):
         self.context.placement_target_eff_T = None
