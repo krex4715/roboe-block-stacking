@@ -83,13 +83,29 @@ class CortexPerceptionBridge:
         self._filtered = {}
         self.stats = {"published": 0, "gated_score": 0, "gated_tower": 0,
                       "override": 0, "attached": 0, "deadband": 0, "frozen": 0, "grasp_events": 0,
-                      "gated_workspace": 0}
+                      "gated_workspace": 0, "snapped": 0, "reacquired": 0}
         self.last_reasons = {}
 
         self._held_name = None
         self._attach_offset = None
         self._last_width = None
         self._settle_count = 0
+
+        # 대점프 스냅: 5cm 넘는 belief-est 불일치는 지터가 아니라 "실제로 다른 곳에 있다"다.
+        # EMA(반감 수렴)로 따라가면 로봇이 접근해 동결되기 전에 수렴이 안 끝나
+        # 30~40mm 오차로 파지가 빗나간다(배치 평가 실측). 대신 2연속 일관 확인 후 즉시 스냅
+        # - 유령 검출은 위치가 튀므로 일관성 요구가 필터가 된다.
+        self.JUMP_SNAP = 0.05      # 이보다 큰 불일치는 점프로 취급
+        self.JUMP_CONSIST = 0.03   # 연속 두 관측이 이 안이면 일관
+        self._pending_jump = {}
+
+        # 배치 후 재획득 창: 놓은 블록의 물리가 빗나가 떨어져도 고스트는 detach 위치(탑)에
+        # 남는다. 탑보호(무예외)가 그 잘못된 belief 를 고착시키지 않도록, **팔이 물러난 뒤**
+        # 3초 동안만 그 블록에 한해 보호를 풀고 재획득을 허용한다. 가림 중 오검(이전 사고의
+        # 원인)은 팔이 물러나면 사라지므로 창을 팔 후퇴 이후로 지연하는 것이 핵심.
+        self.REACQ_CLEAR = 0.20    # EE 가 고스트에서 이만큼 벗어나면 창 오픈
+        self.REACQ_SECS = 3.0
+        self._reacquire = {}       # {블록: {"armed": bool, "until": float}}
 
     # ------------------------------------------------------------------ 유틸
     def _ema(self, name, p):
@@ -108,6 +124,8 @@ class CortexPerceptionBridge:
         self._attach_offset = None
         self._last_width = None
         self._settle_count = 0
+        self._pending_jump.clear()
+        self._reacquire.clear()
         for k in self.stats:
             self.stats[k] = 0
 
@@ -184,14 +202,28 @@ class CortexPerceptionBridge:
             if width > self.RELEASE_W:
                 # 놓았다: 고스트는 마지막 부착 위치(= 배치 위치)에 그대로 남긴다.
                 # EMA 잔존값(파지 전 테이블 위치)이 다음 발행에 섞이지 않도록 리셋.
+                # 재획득 창은 아직 열지 않는다 - 팔이 물러난 뒤 tick 에서 arm 된다.
                 self._filtered.pop(self._held_name, None)
+                self._reacquire[self._held_name] = {"armed": False, "until": 0.0}
                 self._held_name = None
                 self._attach_offset = None
+
+        # 재획득 창 arm: detach 된 블록에서 EE 가 충분히 물러나면 3초 창을 연다
+        for name, rq in list(self._reacquire.items()):
+            if rq["armed"]:
+                if time.time() > rq["until"]:
+                    self._reacquire.pop(name, None)
+            elif name in blocks:
+                p_g, _ = blocks[name].obj.get_world_pose()
+                if float(np.linalg.norm(np.asarray(p_g, dtype=float) - t)) > self.REACQ_CLEAR:
+                    rq["armed"] = True
+                    rq["until"] = time.time() + self.REACQ_SECS
 
         if self._held_name is not None and self._attach_offset is not None:
             block = blocks[self._held_name]
             local_p, q0 = self._attach_offset
             p_att = t + R @ local_p
+            p_att[2] = max(float(p_att[2]), CUBE_HALF)  # 부착 경로에도 z 클램프
             block.obj.set_world_pose(position=p_att, orientation=q0)
             # measured 도 부착 위치로 갱신 - stale measured(파지 전 테이블 위치)가 남아 있으면
             # monitor_perception 의 15cm 분기가 고스트를 테이블로 되돌린다(실측 함정).
@@ -201,7 +233,7 @@ class CortexPerceptionBridge:
         return self._held_name
 
     # ------------------------------------------------------ 10Hz: 인식 발행
-    def update(self, context, detections, estimates, robot):
+    def update(self, context, detections, estimates, robot, yaws=None):
         self.last_reasons = {}
         blocks = getattr(context, "blocks", None)
         if not blocks:
@@ -235,18 +267,52 @@ class CortexPerceptionBridge:
                 self.last_reasons[name] = f"작업공간 밖 {np.round(p_arr, 2)} -> 기각"
                 continue
 
+            # (1c) 비행 불가 게이트: 탑 반경 **밖**의 자유 큐브는 바닥에만 있을 수 있다.
+            # 공중(z > 반큐브+1.5cm)을 가리키는 추정은 접근하는 팔이 bbox 깊이를 오염시킨
+            # 시그니처다(팔이 큐브보다 카메라에 가깝다). 실측: 접근 중 est 가 z=0.15 공중을
+            # 가리키며 대변위 스냅을 연발시켜 목표가 떠다니고 파지가 영원히 수렴하지 못했다.
+            # (탑 반경 안은 층 높이가 정상이고, 운반 중 큐브는 부착이 담당하므로 무관)
+            near_tower_xy = float(np.linalg.norm(p_arr[:2] - tower_pos[:2])) < self.tower_radius
+            if not near_tower_xy and p_arr[2] > CUBE_HALF + 0.015:
+                self.stats["gated_airborne"] += 1
+                self.last_reasons[name] = f"공중 추정 z={p_arr[2]:.2f} -> 기각 (팔 가림 오염)"
+                continue
+
             block = blocks[name]
             belief_p, q = block.obj.get_world_pose()
             belief_p = np.asarray(belief_p, dtype=float)
 
             # (4) 조작 중 동결 — 엔드이펙터가 붙은 블록은 목표가 흔들리면 안 된다.
             #     이걸 빼면 로봇이 큐브에 영원히 도달하지 못한다(실패 모드 (a)).
-            if ee_p is not None and np.linalg.norm(belief_p - ee_p) < self.freeze_radius:
+            #     단 **미세 변화(<5cm)만** 동결한다. 파지가 빗나가 큐브를 쳐내면 실제가
+            #     8cm+ 이동하는데, 그때도 동결하면 로봇이 빈자리에 무한 재시도하며 큐브를
+            #     계속 밀어낸다(실측: 88mm -> 837mm 까지 밀림). 대변위는 지터가 아니라
+            #     사건이므로 아래 점프-일관 검사로 통과시켜 belief 가 따라가게 한다.
+            raw_dis = float(np.linalg.norm(belief_p - p_arr))
+            if (ee_p is not None and np.linalg.norm(belief_p - ee_p) < self.freeze_radius
+                    and raw_dis <= self.JUMP_SNAP):
                 self.stats["frozen"] += 1
                 self.last_reasons[name] = "조작 중 -> belief 동결"
                 continue
 
-            p_f = self._ema(name, p).copy()
+            # 대점프 스냅 vs EMA (필드 주석 참고): 5cm 넘는 불일치는 지터가 아니라
+            # "실제로 다른 곳에 있다"다. EMA 로 반씩 따라가면 로봇 접근(동결 진입) 전에
+            # 수렴이 안 끝나 30~40mm 오차로 파지가 빗나간다(배치 평가 실측).
+            # 2연속 일관 관측이면 즉시 스냅 - 유령 검출은 위치가 튀어 일관성 필터에 걸린다.
+            if raw_dis > self.JUMP_SNAP:
+                pend = self._pending_jump.get(name)
+                if pend is not None and float(np.linalg.norm(pend - p_arr)) < self.JUMP_CONSIST:
+                    self._filtered[name] = p_arr.copy()
+                    self._pending_jump.pop(name, None)
+                    p_f = p_arr.copy()
+                    self.stats["snapped"] += 1
+                else:
+                    self._pending_jump[name] = p_arr.copy()
+                    self.last_reasons[name] = f"점프 {raw_dis*100:.0f}cm -> 일관 확인 대기"
+                    continue
+            else:
+                self._pending_jump.pop(name, None)
+                p_f = self._ema(name, p).copy()
             p_f[2] = max(float(p_f[2]), CUBE_HALF)
             disagreement = float(np.linalg.norm(belief_p - p_f))
 
@@ -256,17 +322,31 @@ class CortexPerceptionBridge:
                 self.last_reasons[name] = f"변화 미미 {disagreement*1000:.1f}mm -> 유지"
                 continue
 
-            # (5) 탑 보호 — **예외 없음**. 탑 반경 안의 belief 는 조작이 완료한 결과다.
-            # 처음엔 "인식이 크게 다르다고 하면 교정"하는 예외를 뒀지만, 실측에서 두 번
-            # 연속으로 그 예외가 유령 검출에 뚫려 다 쌓은 블록의 belief 를 날렸다
-            # (1차: 배경 깊이의 (-1.38,0.45) / 2차: 로봇 몸통 오검 (0.03,0.19) — 작업공간 안).
-            # "조작이 확정한 belief 를 인식이 뒤집을 수 없다"가 원칙과도 일관된다.
+            # (5) 탑 보호. 유일한 예외는 **재획득 창** - 배치 직후 팔이 물러난 뒤 3초간
+            # 그 블록에 한해 반영 허용: 배치가 빗나가 물리 큐브가 탑 밖에 떨어졌을 때
+            # belief 고착을 막는 자가 복구 경로다 (점프는 위 2연속 필터를 거친다).
+            # "크게 다르면 교정" 식의 무조건 예외는 유령 검출에 두 번 뚫려 폐기했다
+            # (1차: 배경 깊이 (-1.38,0.45) / 2차: 가림 중 로봇 몸통 오검 (0.03,0.19)).
+            # 재획득 창은 팔이 물러난 뒤에만 열리므로 가림 오검 시나리오와 겹치지 않는다.
             if self._is_in_tower(block, tower_pos):
-                self.stats["gated_tower"] += 1
-                self.last_reasons[name] = "탑에 적재됨 -> 보호"
-                continue
+                rq = self._reacquire.get(name)
+                if not (rq and rq["armed"] and now < rq["until"]):
+                    self.stats["gated_tower"] += 1
+                    self.last_reasons[name] = "탑에 적재됨 -> 보호"
+                    continue
+                self.stats["reacquired"] += 1
+                self.last_reasons[name] = "재획득 창 -> 반영"
 
-            self._publish(block, p_f, np.asarray(q, dtype=float), now)
+            # 방향: yaw 추정이 있으면 반영 (없으면 기존 belief 방향 유지).
+            # 45도 돌아간 큐브를 정렬 가정으로 집으면 손가락이 모서리를 쳐낸다(실측).
+            q_out = np.asarray(q, dtype=float)
+            if yaws:
+                cls_of = {v: k for k, v in CLASS_TO_BLOCK.items()}
+                yw = yaws.get(cls_of.get(name))
+                if yw is not None:
+                    q_out = np.array([np.cos(yw / 2.0), 0.0, 0.0, np.sin(yw / 2.0)])
+
+            self._publish(block, p_f, q_out, now)
             self.stats["published"] += 1
             self.last_reasons.setdefault(name, "발행")
 
@@ -294,4 +374,4 @@ class CortexPerceptionBridge:
         s = self.stats
         return (f"발행 {s['published']} / 파지 {s['grasp_events']} / 부착 {s['attached']} / "
                 f"동결 {s['frozen']} / 데드밴드 {s['deadband']} / 탑보호 {s['gated_tower']} / "
-                f"작업공간기각 {s['gated_workspace']}")
+                f"작업공간기각 {s['gated_workspace']} / 스냅 {s['snapped']} / 재획득 {s['reacquired']}")

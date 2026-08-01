@@ -25,7 +25,13 @@ from isaacsim.examples.interactive.cortex.cortex_base import CortexBase
 
 # [ROBOE] 씬/비전 공통 모듈. 상대 import 라 GUI 확장 경로와 standalone 양쪽에서 동작한다.
 from .perception.cortex_bridge import CortexPerceptionBridge
-from .perception.estimator_3d import backproject_pixels, clamp_to_support, sample_depth, surface_to_center
+from .perception.estimator_3d import (
+    backproject_pixels,
+    clamp_to_support,
+    estimate_yaw,
+    sample_depth,
+    surface_to_center,
+)
 from .perception.zed_camera import ZedXCamera
 from .scene_setup import add_belief_cubes, add_cubes, add_lighting, add_tower_marker
 
@@ -214,7 +220,7 @@ class RoboeBlockStacking(CortexBase):
         best = self.detector.best_per_class(detections)
 
         cam_pos = self.zed.position
-        estimates, lines = {}, []
+        estimates, yaws, lines = {}, {}, []
         for cls, det in sorted(best.items()):
             x0, y0, x1, y1 = det["box"]
             u, v = (x0 + x1) / 2.0, (y0 + y1) / 2.0
@@ -227,8 +233,15 @@ class RoboeBlockStacking(CortexBase):
             if self.correction_mode != "none":
                 p = clamp_to_support([p])[0]
             estimates[cls] = p
+
+            # yaw 추정 - 없으면 belief 방향 유지 (배치 평가에서 45도 큐브 파지가
+            # 모서리를 쳐내는 실패로 필요성이 입증됨. 과제의 "필요 시 Orientation")
+            yaw, _n = estimate_yaw(self.zed.camera, depth, (x0, y0, x1, y1))
+            if yaw is not None:
+                yaws[cls] = yaw
+            yaw_s = f" yaw {np.degrees(yaw):4.1f}°" if yaw is not None else ""
             lines.append(f"{cls:12s} {det['score']:.2f}  "
-                         f"({p[0]:+.3f}, {p[1]:+.3f}, {p[2]:+.3f})")
+                         f"({p[0]:+.3f}, {p[1]:+.3f}, {p[2]:+.3f}){yaw_s}")
 
         self.last_estimates = estimates
         self._draw_estimates(estimates)
@@ -242,7 +255,7 @@ class RoboeBlockStacking(CortexBase):
             # direct 모드에서는 belief == 물리 큐브라 직접 쓰면 큐브가 순간이동한다.
             # 측정값만 발행하고 동기화는 프레임워크(monitor_perception)에 맡긴다.
             self.bridge.direct_write = (self.belief_mode == "ghost")
-            self.bridge.update(ctx, best, estimates, self.robot)
+            self.bridge.update(ctx, best, estimates, self.robot, yaws=yaws)
             bridge_line = "\n" + self.bridge.summary()
             for name, reason in sorted(self.bridge.last_reasons.items()):
                 if reason != "발행":

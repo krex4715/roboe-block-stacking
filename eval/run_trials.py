@@ -31,7 +31,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--trials", type=int, default=10)
 parser.add_argument("--tower", type=float, nargs=2, default=[0.25, 0.30], metavar=("X", "Y"))
 parser.add_argument("--seed", type=int, default=42)
-parser.add_argument("--max-steps", type=int, default=9000, help="트라이얼당 타임아웃 (물리 스텝)")
+parser.add_argument("--max-steps", type=int, default=6000, help="트라이얼당 타임아웃 (물리 스텝, 완주는 ~1400)")
 parser.add_argument("--record", action="store_true", help="첫 트라이얼의 카메라 프레임을 mp4 로 저장")
 parser.add_argument("--out", type=str, default=str(REPO / "media" / "m6"))
 args = parser.parse_args()
@@ -176,7 +176,15 @@ def main():
             "init_belief_err_mm": round(float(np.mean(init_belief_err)) * 1000, 1),
             "order": "->".join(order),
             "grasps": stats.get("grasp_events"), "ghost_rejects": stats.get("gated_workspace"),
+            "published": stats.get("published"), "snapped": stats.get("snapped"),
+            "reacquired": stats.get("reacquired"),
         })
+        # 트라이얼마다 즉시 저장 - 전체 타임아웃/정전에도 결과 보존
+        csv_path = outdir / "trials.csv"
+        with open(csv_path, "w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=list(results[0].keys()))
+            w.writeheader()
+            w.writerows(results)
         r = results[-1]
         print(f"[trial {trial}] {'PASS' if ok else 'FAIL':4s} steps={r['steps']} "
               f"wall={r['wall_s']}s 초기belief오차={r['init_belief_err_mm']}mm "

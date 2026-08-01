@@ -75,6 +75,56 @@ def clamp_to_support(points, half=CUBE_HALF, support_z=0.0):
     return p
 
 
+def yaw_quat(yaw_rad):
+    """월드 z축 회전 쿼터니언 (w, x, y, z)."""
+    return np.array([np.cos(yaw_rad / 2.0), 0.0, 0.0, np.sin(yaw_rad / 2.0)])
+
+
+def estimate_yaw(camera, depth_image, box, stride=2):
+    """깊이 기반 큐브 yaw 추정 (mod 90도 - 정육면체 대칭).
+
+    왜 필요한가 (배치 평가 실측): belief 방향을 갱신하지 않으면 45도 돌아간 큐브를
+    정렬 가정으로 집게 되고, 손가락이 대각 모서리를 쳐내 큐브가 20~80cm 날아간다.
+    과제 명세의 "필요 시 Orientation 추정"이 정량 평가로 '필요'가 입증된 사례.
+
+    방법: bbox 안 깊이 픽셀들을 역투영 -> 상면(z 상위 1.5cm) 포인트만 남김 ->
+    xy 평면 투영 -> cv2.minAreaRect 의 회전각. 상면은 정사각형이라 각도가 곧 yaw다.
+
+    Returns:
+        (yaw_rad mod pi/2, 사용한 포인트 수). 신뢰 불가 시 (None, n).
+    """
+    import cv2
+
+    x0, y0, x1, y1 = [int(round(v)) for v in box]
+    h, w = depth_image.shape[:2]
+    x0, y0 = max(0, x0), max(0, y0)
+    x1, y1 = min(w - 1, x1), min(h - 1, y1)
+    if x1 - x0 < 6 or y1 - y0 < 6:
+        return None, 0
+
+    us, vs = np.meshgrid(np.arange(x0, x1 + 1, stride), np.arange(y0, y1 + 1, stride))
+    us, vs = us.ravel(), vs.ravel()
+    ds = depth_image[vs, us].astype(np.float64)
+    valid = np.isfinite(ds) & (ds > 1e-4)
+    if valid.sum() < 30:
+        return None, int(valid.sum())
+
+    pts = backproject_pixels(camera, np.stack([us[valid], vs[valid]], axis=1), ds[valid])
+    top_z = pts[:, 2].max()
+    top = pts[pts[:, 2] > top_z - 0.015][:, :2].astype(np.float32)
+    if len(top) < 30:
+        return None, len(top)
+
+    rect = cv2.minAreaRect(top)
+    (rw, rh) = rect[1]
+    # 상면 한 변은 CUBE_SIZE. 크게 다르면 가림/오검 - 신뢰하지 않는다
+    if not (CUBE_SIZE * 0.6 < rw < CUBE_SIZE * 1.6 and CUBE_SIZE * 0.6 < rh < CUBE_SIZE * 1.6):
+        return None, len(top)
+
+    yaw = np.deg2rad(rect[2]) % (np.pi / 2.0)
+    return float(yaw), len(top)
+
+
 def sample_depth(depth_image, pixel, window_ratio=0.4, box=None):
     """bbox 중앙 영역의 깊이 **중앙값**을 뽑는다.
 
