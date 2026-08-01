@@ -304,6 +304,58 @@ class RoboeBlockStacking(CortexBase):
             carb.log_warn(f"[ROBOE] 검출 뷰 갱신 실패(비활성화): {exc}")
             self.enable_detection_view = False
 
+    # [ROBOE] 라이브 랜덤화 (UI 버튼) - 배치 평가의 랜덤 스폰을 GUI 데모로 재현.
+    # 물리 큐브만 옮기고 belief(고스트)는 건드리지 않는다 - 인식이 새 위치를
+    # 재검출해 대점프 스냅으로 따라잡는 과정이 그대로 보이는 것이 데모의 핵심.
+    def randomize_cubes(self):
+        if not self.cubes:
+            return "랜덤화 불가: 먼저 LOAD 하세요"
+        CUBE_SIZE = 0.0515
+        MIN_GAP = CUBE_SIZE * 1.6
+        tower_xy = np.asarray(self.tower_position[:2], dtype=float)
+
+        # 파지 중이거나 탑에 쌓인 큐브는 제외 (조작 중 세계를 흔들지 않는다)
+        skip = set()
+        ctx = getattr(self.decider_network, "context", None) if self.decider_network else None
+        if ctx is not None:
+            if getattr(ctx, "in_gripper", None) is not None:
+                skip.add(ctx.in_gripper.name)
+            skip.update(b.name for b in ctx.block_tower.stack)
+
+        rng = np.random.default_rng()
+        fixed = [np.asarray(self.cubes[n].get_world_pose()[0])[:2] for n in skip if n in self.cubes]
+        placed = []
+        moved = []
+        for name, obj in self.cubes.items():
+            if name in skip:
+                continue
+            for _ in range(500):
+                p = np.array([rng.uniform(0.28, 0.72), rng.uniform(-0.55, 0.38)])
+                r = np.linalg.norm(p)
+                # 파지 유효 작업공간 (eval 러너와 동일 명세 - 근거는 그쪽 주석)
+                if not (0.40 <= r <= 0.75):
+                    continue
+                if np.linalg.norm(p - tower_xy) <= 0.16:
+                    continue
+                if any(np.linalg.norm(p - q) <= MIN_GAP for q in placed + fixed):
+                    continue
+                break
+            else:
+                continue
+            placed.append(p)
+            yaw = rng.uniform(0, np.pi / 2)
+            obj.set_world_pose(position=np.array([p[0], p[1], CUBE_SIZE / 2]),
+                               orientation=np.array([np.cos(yaw / 2), 0, 0, np.sin(yaw / 2)]))
+            obj.set_linear_velocity(np.zeros(3))
+            obj.set_angular_velocity(np.zeros(3))
+            moved.append(f"{name}({p[0]:.2f},{p[1]:.2f})")
+
+        report = f"랜덤화: {', '.join(moved) if moved else '(대상 없음)'}"
+        if skip:
+            report += f" / 유지: {sorted(skip)}"
+        carb.log_warn(f"[ROBOE] {report}")
+        return report
+
     def _report_perception(self, text):
         if self._perception_fn:
             self._perception_fn(text)

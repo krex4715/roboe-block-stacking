@@ -167,8 +167,16 @@ def calc_grasp_for_top_of_tower(context):
     if len(candidate_Ts) == 0:
         return None
 
-    desired_ax = np.array([0.0, -1.0, 0.0])
-    scored_candidate_Ts = [(np.dot(desired_ax, T[:3, 0]), T) for T in candidate_Ts]
+    # [ROBOE] 배치 자세 선택: 고정 선호(월드 -y) -> 현재 손목에서 최소 회전.
+    # 스톡의 고정 선호는 고정 스폰 기하에서만 안전하다. 랜덤 yaw 파지 후에는 -90도
+    # 요구가 손목 가동범위 밖 비틀림이 될 수 있고, 그러면 RMPFlow 가 부족한 회전을
+    # 베이스로 보상하다 관절이 순차 감긴다 (실측 hover2: 운반 중 q7 여유 1.1->0.04,
+    # 이어 q0 0.77->0.04 로 감겨 탑 위 6cm 에서 영구 미수렴). 큐브는 90도 대칭이라
+    # 네 후보가 물리적으로 같은 배치다 - 현재 자세와 가장 가까운 것을 고르면 요구
+    # 비틀림이 최대 45도로 유계라 감김이 원리적으로 불가능하다. 매 cycle 재평가되지만
+    # 선택된 후보로 회전할수록 정렬이 커지는 자기강화 구조라 채터링 없이 수렴한다.
+    eff_x = ct.robot.arm.get_fk_T()[:3, 0]
+    scored_candidate_Ts = [(np.dot(eff_x, T[:3, 0]), T) for T in candidate_Ts]
 
     grasp_T = max(scored_candidate_Ts, key=lambda v: v[0])[1]
     return grasp_T

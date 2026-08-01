@@ -129,6 +129,18 @@ class RoboeBlockStackingUI(BaseSampleUITemplate):
                 }
                 self._buttons["Reset"] = btn_builder(**dict)
                 self._buttons["Reset"].enabled = False
+                # [ROBOE] 배치 평가의 랜덤 스폰을 라이브 데모로 - 실행 중 눌러도 안전하다
+                # (파지 중/탑에 쌓인 큐브는 제외되고, belief 는 인식이 스스로 따라잡는다).
+                dict = {
+                    "label": "Randomize Cubes",
+                    "type": "button",
+                    "text": "Randomize",
+                    "tooltip": "탑에 없는 큐브를 유효 작업공간(r 0.40~0.75) 안에서 무작위 재배치. "
+                               "belief 는 건드리지 않으므로 인식이 재검출로 따라잡는 과정이 보인다",
+                    "on_clicked_fn": self._on_randomize,
+                }
+                self._buttons["Randomize Cubes"] = btn_builder(**dict)
+                self._buttons["Randomize Cubes"].enabled = True
 
         self.build_extra_frames()
 
@@ -244,6 +256,14 @@ class RoboeBlockStackingUI(BaseSampleUITemplate):
     def on_perception(self, text):
         if hasattr(self, "perception_model"):
             self.perception_model.set_value(text)
+
+    def _on_randomize(self):
+        try:
+            self._sample.randomize_cubes()
+        except Exception as exc:
+            import carb
+
+            carb.log_warn(f"[ROBOE] 랜덤화 실패: {exc}")
 
     def _on_perception_toggled(self, value):
         if self._sample is not None:
