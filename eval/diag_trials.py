@@ -64,7 +64,10 @@ def sample_spawns(rng, tower_xy):
             break
         p = np.array([rng.uniform(*SCATTER_X), rng.uniform(*SCATTER_Y)])
         r = np.linalg.norm(p)
-        if not (0.30 <= r <= 0.75):
+        # 파지 유효 작업공간: r >= 0.40 (실측 근거 - r~0.335 파지 시 팔이 접힌
+        # 자세로 관절한계에 갇혀 RMPFlow 가 이탈 불가. diag14 트라이얼 6/10 재현.
+        # 스톡 예제도 r 0.5~0.8 에서만 동작하도록 설계됨. 실제 셀의 작업 반경 명세와 동일 개념)
+        if not (0.40 <= r <= 0.75):
             continue
         if np.linalg.norm(p - tower_xy) <= 0.16:
             continue

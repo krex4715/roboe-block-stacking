@@ -51,6 +51,9 @@ class RoboeBlockStackingExtension(omni.ext.IExt):
 
         ui_handle = RoboeBlockStackingUI(**ui_kwargs)
         ui_handle.sample = RoboeBlockStacking(ui_handle.on_diagnostics, ui_handle.on_perception)
+        # 검출 뷰 창은 GUI 에서만 의미가 있으므로 확장(=GUI 전용 코드)에서 켠다.
+        # headless 러너들은 RoboeBlockStacking 을 직접 만들므로 기본값 False 그대로다.
+        ui_handle.sample.enable_detection_view = True
 
         get_browser_instance().register_example(
             name=self.example_name,

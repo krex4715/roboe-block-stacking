@@ -6,8 +6,9 @@
 #   - M0: 클래스명 변경 외 원본과 동일 (스톡 동작 검증용 베이스라인)
 #   - M2: 씬 구성을 scene_setup 으로 공통화(연두 큐브 + 조명 + 타워 표식),
 #         ZED-X 카메라 스폰/초기화, tower_position 을 UI에서 받아 behavior 에 전달
-#   - M4: YOLO 추론 + 3D 추정을 GUI 루프에 연결 (뷰포트에 인식 결과를 3D 마커로 표시)
-#   - M5 예정: Cortex bridge 연결 (set_measured_pose)
+#   - M4: YOLO 추론 + 3D 추정을 GUI 루프에 연결 (인식 상태는 Perception UI 패널에 표시)
+#   - M5: Cortex bridge 연결 - ghost belief 구조 (조작 중 belief 불가침 원칙)
+#   - M6: 뷰포트 3D 마커 제거 (자기관측 오염 - 아래 주석), 정체 감시자, 배치 평가
 
 import gc
 import json
@@ -50,16 +51,11 @@ MODEL_META = REPO_ROOT / "models" / "model_meta.json"
 # 근거: Isaac Sim 렌더와 GPU 를 공유하면 추론이 ~27ms 걸린다(단독 2.2ms). 10Hz면 예산의 27%.
 PERCEPTION_EVERY_N_STEPS = 6
 
-# 뷰포트 마커 색 - **반드시 중립색이어야 한다** (자기 관측 오염 방지).
-# 처음엔 클래스별 큐브 색으로 그렸는데, debug_draw 점이 ZED 카메라 render product 에도
-# 렌더링되어 YOLO 가 자기 마커를 큐브로 오검출했다 (실측: 빈 씬에서 노란 점이
-# yellow_cube score 0.93). est 가 마커를 쫓고 마커는 belief 위에 그려지므로
-# **자기 꼬리를 쫓는 표류 루프**가 생겨, 배치된 블록의 belief 가 탑 밖으로 끌려나갔다.
-# 흰/회백은 학습 데이터에서 배경(격자선·로봇·표식판)이던 색이라 검출되지 않는다.
-GHOST_MARKER_COLOR = (1.0, 1.0, 1.0, 1.0)   # 큰 점 = belief (로봇이 믿는 위치)
-EST_MARKER_COLOR = (0.6, 0.6, 0.6, 1.0)     # 작은 점 = 이번 프레임 원시 인식
-BLOCK_TO_CLASS = {"RedCube": "red_cube", "YellowCube": "yellow_cube",
-                  "GreenCube": "green_cube", "BlueCube": "blue_cube"}
+# 뷰포트 3D 마커는 **제거했다** (인식 상태 표시는 Perception UI 패널이 담당).
+# 이유: debug_draw 점은 ZED render product 에도 렌더링된다. 클래스색 마커가 빈 씬에서
+# yellow_cube score 0.93 으로 오검출되는 자기관측 오염을 실측으로 확인했고(중립색은
+# 검출 0건이었지만), 원칙은 '센서가 보는 세계에 디버그 기하를 넣지 않는다'이다.
+# 실물로 치면 RViz 마커가 실제 카메라에 찍히지 않는 그 분리와 같다.
 
 
 class ContextStateMonitor(DfDiagnosticsMonitor):
@@ -94,9 +90,15 @@ class RoboeBlockStacking(CortexBase):
         self.perception_enabled = True
         self.last_estimates = {}       # {클래스: 추정 3D 위치}
         self._perception_step = 0
-        self._debug_draw = None
-        # [ROBOE] 깊이->중심 보정 방식. UI에서 바꾸면 뷰포트의 점이 실제로 움직인다.
-        # "none" 으로 두면 점이 큐브보다 ~3cm 카메라 쪽으로 앞서 찍히는 것을 눈으로 볼 수 있다.
+        # [ROBOE] YOLO 검출 뷰 창 (extension 이 GUI 에서만 True 로 켠다).
+        # 3D 마커와 달리 **캡처된 이미지 위에** 박스를 그려 omni.ui 창에 띄우므로
+        # 카메라 이후 단계 = 검출기로 되먹임될 수 없다. 클래스색을 마음껏 써도 안전.
+        self.enable_detection_view = False
+        self._det_view_window = None
+        self._det_view_provider = None
+        self._det_view_tick = 0
+        # [ROBOE] 깊이->중심 보정 방식. UI에서 바꾸면 Perception 패널의 추정 좌표가 변한다.
+        # "none" 으로 두면 추정이 큐브 중심보다 ~3cm 카메라 쪽(앞면)으로 치우친다.
         self.correction_mode = "box"
 
         # [ROBOE] belief 구조 (scene_setup.add_belief_cubes 주석 참고)
@@ -202,19 +204,8 @@ class RoboeBlockStacking(CortexBase):
             carb.log_warn(f"[ROBOE] 검출기 로드 실패: {exc}")
             self._report_perception(f"검출기 로드 실패: {exc}")
 
-    def _get_debug_draw(self):
-        if self._debug_draw is None:
-            try:
-                from isaacsim.util.debug_draw import _debug_draw
-
-                self._debug_draw = _debug_draw.acquire_debug_draw_interface()
-            except Exception as exc:
-                carb.log_warn(f"[ROBOE] debug_draw 사용 불가: {exc}")
-                self._debug_draw = False
-        return self._debug_draw or None
-
     def _run_perception(self):
-        """RGB-D 취득 -> YOLO 검출 -> 3D 위치 추정 -> 뷰포트 마커 + UI 텍스트."""
+        """RGB-D 취득 -> YOLO 검출 -> 3D 위치 추정 -> 검출 뷰 창 + UI 텍스트."""
         if self.detector is None or self.zed is None or self.zed.camera is None:
             return
         rgb, depth = self.zed.capture()
@@ -223,6 +214,8 @@ class RoboeBlockStacking(CortexBase):
 
         detections = self.detector(rgb)
         best = self.detector.best_per_class(detections)
+        if self.enable_detection_view:
+            self._update_detection_view(rgb, detections, best)
 
         cam_pos = self.zed.position
         estimates, yaws, lines = {}, {}, []
@@ -249,7 +242,6 @@ class RoboeBlockStacking(CortexBase):
                          f"({p[0]:+.3f}, {p[1]:+.3f}, {p[2]:+.3f}){yaw_s}")
 
         self.last_estimates = estimates
-        self._draw_estimates(estimates)
 
         # [ROBOE] 여기가 인식이 실제 제어에 연결되는 지점.
         # bridge 가 CortexObject.set_measured_pose() 로 발행하면
@@ -272,35 +264,45 @@ class RoboeBlockStacking(CortexBase):
         self._report_perception(header + "\n" + ("\n".join(lines) if lines else "(검출 없음)")
                                 + bridge_line)
 
-    def _draw_estimates(self, estimates):
-        """뷰포트에 두 가지를 그린다 - 이 둘의 차이가 곧 파이프라인의 상태를 보여준다.
+    # [ROBOE] YOLO 검출 뷰 - "검출기가 지금 보고 있는 것"을 그대로 보여주는 창.
+    # 3D 마커(제거됨, 파일 상단 주석)와 달리 이미지는 **캡처 후**에 주석되므로
+    # 검출기로 절대 되먹임되지 않는다. 실물 시스템의 검출 오버레이 뷰와 같은 구조.
+    _DET_VIEW_COLORS = {  # RGB. 이 창 안에서만 쓰이므로 클래스색이 안전하다.
+        "red_cube": (255, 60, 60), "yellow_cube": (255, 220, 40),
+        "green_cube": (140, 230, 60), "blue_cube": (70, 130, 255),
+    }
 
-          작은 점 : 이번 프레임의 **원시 인식 결과**
-          큰 점   : 로봇이 **믿고 있는 위치**(고스트) — 게이팅/필터를 거친 결과
-
-        평소엔 겹쳐 보이지만, 카메라를 가리거나 게이트가 걸리면 큰 점만 남는다.
-        즉 "로봇이 무엇을 보고 계획하는가"가 눈에 보인다. (고스트 프림 자체는
-        카메라가 자기 자신을 검출하지 않도록 렌더링을 꺼두었다)
-        """
-        draw = self._get_debug_draw()
-        if draw is None:
+    def _update_detection_view(self, rgb, detections, best):
+        self._det_view_tick += 1
+        if (self._det_view_tick - 1) % 3 != 0:  # 10Hz 인식 중 ~3.3Hz 만 갱신 (UI 비용 절감)
             return
-        draw.clear_points()
-        pts, colors, sizes = [], [], []
+        try:
+            import cv2
+            import omni.ui as ui
 
-        for cls, p in estimates.items():
-            pts.append((float(p[0]), float(p[1]), float(p[2]) + 0.05))
-            colors.append(EST_MARKER_COLOR)
-            sizes.append(8)
+            if self._det_view_window is None:
+                self._det_view_provider = ui.ByteImageProvider()
+                self._det_view_window = ui.Window("ROBOE - YOLO 검출 뷰 (ZED-X)",
+                                                  width=656, height=410)
+                with self._det_view_window.frame:
+                    ui.ImageWithProvider(self._det_view_provider,
+                                         fill_policy=ui.IwpFillPolicy.IWP_PRESERVE_ASPECT_FIT)
 
-        for name, ghost in self.belief_cubes.items():
-            p, _ = ghost.get_world_pose()
-            pts.append((float(p[0]), float(p[1]), float(p[2]) + 0.09))
-            colors.append(GHOST_MARKER_COLOR)
-            sizes.append(20)
-
-        if pts:
-            draw.draw_points(pts, colors, sizes)
+            img = np.ascontiguousarray(rgb[..., :3]).copy()
+            best_boxes = {id(d) for d in best.values()}
+            for d in detections:
+                x0, y0, x1, y1 = (int(v) for v in d["box"])
+                color = self._DET_VIEW_COLORS.get(d["class"], (255, 255, 255))
+                thick = 3 if id(d) in best_boxes else 1  # 굵은 박스 = 실제 채택된 검출
+                cv2.rectangle(img, (x0, y0), (x1, y1), color, thick)
+                cv2.putText(img, f"{d['class']} {d['score']:.2f}", (x0, max(y0 - 6, 14)),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2, cv2.LINE_AA)
+            img = cv2.resize(img, (640, 360), interpolation=cv2.INTER_AREA)
+            rgba = np.dstack([img, np.full(img.shape[:2], 255, dtype=np.uint8)])
+            self._det_view_provider.set_bytes_data(rgba.flatten().tolist(), [640, 360])
+        except Exception as exc:  # 디버그 뷰가 제어 루프를 깨서는 안 된다
+            carb.log_warn(f"[ROBOE] 검출 뷰 갱신 실패(비활성화): {exc}")
+            self.enable_detection_view = False
 
     def _report_perception(self, text):
         if self._perception_fn:
@@ -323,9 +325,6 @@ class RoboeBlockStacking(CortexBase):
     def set_perception_enabled(self, enabled: bool):
         self.perception_enabled = bool(enabled)
         if not enabled:
-            draw = self._get_debug_draw()
-            if draw is not None:
-                draw.clear_points()
             self._report_perception("인식 OFF — 로봇은 시뮬레이터 ground truth 로 동작합니다.")
 
     def _on_monitor_update(self, context):
