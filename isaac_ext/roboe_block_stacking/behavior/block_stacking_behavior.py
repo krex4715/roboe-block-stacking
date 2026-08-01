@@ -549,11 +549,15 @@ class BuildTowerContext(DfRobotApiContext):
         # 안 움직임). 탑 멤버가 아닌 블록이 EE 바로 근처면 척력을 끈다 - 스치더라도
         # 인식이 재획득해 복구 가능하지만, 정체는 영구 실패이기 때문.
         in_tower_names = set(b.name for b in self.block_tower.stack)
+        # [ROBOE] 정체 감시자(stall watchdog)가 켠 임시 전체 해제 창: RMPFlow 가
+        # 장애물 척력/자세 항 평형에 빠져 EE 가 수 초간 정지하면, 외부(example)에서
+        # 이 타임스탬프를 설정해 비타워 장애물을 잠시 전부 끈다.
+        clear_all = getattr(self, "_roboe_clear_obstacles_until", 0) > time.time()
         for name, block in self.blocks.items():
             if name in in_tower_names or block in blocks_to_suppress:
                 continue
             block_p, _ = block.obj.get_world_pose()
-            if np.linalg.norm(block_p[:2] - eff_p[:2]) < 0.20:
+            if clear_all or np.linalg.norm(block_p[:2] - eff_p[:2]) < 0.20:
                 blocks_to_suppress.append(block)
                 if block.collision_avoidance_enabled:
                     try:

@@ -344,9 +344,52 @@ class RoboeBlockStacking(CortexBase):
         if self._monitor_fn:
             self._monitor_fn(diagnostic, decision_stack)
 
+    # [ROBOE] 정체 감시자(stall watchdog).
+    # 배치 평가 실측: 서로 다른 트라이얼에서 EE 가 거의 같은 좌표(0.32, 0.10)에 두 계측
+    # 사이 1mm 도 안 움직인 채 목표 21cm 앞에서 영구 정지했다. 근처에 켜진 장애물이
+    # 없었으므로 RMPFlow 의 자세(null-space)·방향 항 평형점으로 판단된다.
+    # 처방(표준 회복 패턴): ① 비타워 장애물 임시 전체 해제(2s, behavior 의
+    # _roboe_clear_obstacles_until 훅) ② 자세 어트랙터를 살짝 흔들어 평형을 깬다.
+    STALL_WINDOW_STEPS = 240   # 4초
+    STALL_EPS = 0.005          # 이 이하 움직임이면 정지로 판정
+
+    def _stall_watchdog(self):
+        try:
+            ee = np.asarray(self.robot.arm.get_fk_p(), dtype=float)
+        except Exception:
+            return
+        if not hasattr(self, "_stall_anchor"):
+            self._stall_anchor, self._stall_count, self._stall_recoveries = ee, 0, 0
+            return
+        if np.linalg.norm(ee - self._stall_anchor) > self.STALL_EPS:
+            self._stall_anchor, self._stall_count = ee, 0
+            return
+        self._stall_count += 1
+        if self._stall_count < self.STALL_WINDOW_STEPS:
+            return
+
+        ctx = self.decider_network.context if self.decider_network else None
+        if ctx is None or ctx.block_tower.is_complete:
+            self._stall_count = 0
+            return
+        import time as _t
+
+        ctx._roboe_clear_obstacles_until = _t.time() + 2.0
+        try:
+            q = self.robot.arm.articulation_subset.get_joints_state().positions.astype(float)
+            rng = np.random.default_rng(self._stall_recoveries)  # 재현 가능한 섭동
+            self.robot.arm.set_posture_config(q + rng.uniform(-0.12, 0.12, q.shape))
+        except Exception as exc:
+            carb.log_warn(f"[ROBOE] posture 섭동 실패: {exc}")
+        self._stall_recoveries += 1
+        self._stall_count = 0
+        carb.log_warn(f"[ROBOE] 정체 감지 -> 회복 시도 #{self._stall_recoveries} "
+                      f"(장애물 해제 2s + posture 섭동)")
+
     def _on_physics_step(self, step_size):
         world = self.get_world()
         world.step(False, False)
+        self._stall_watchdog()
 
         # [ROBOE] 파지 추적/부착은 **매 스텝** 돌려야 한다.
         # in_gripper 가 매 스텝 깜빡이는 신호라 10Hz 로 샘플링하면 엇박이 나 부착이 안 걸린다.

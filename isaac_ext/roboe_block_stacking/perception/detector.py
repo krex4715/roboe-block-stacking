@@ -151,10 +151,35 @@ class CubeDetector:
             })
         return out
 
-    def best_per_class(self, detections):
-        """클래스별 최고 점수 1개만 남긴다. 큐브는 색마다 하나뿐이라는 사전지식을 쓰는 것."""
+    @staticmethod
+    def _iou(a, b):
+        ax0, ay0, ax1, ay1 = a
+        bx0, by0, bx1, by1 = b
+        ix = max(0.0, min(ax1, bx1) - max(ax0, bx0))
+        iy = max(0.0, min(ay1, by1) - max(ay0, by0))
+        inter = ix * iy
+        union = (ax1 - ax0) * (ay1 - ay0) + (bx1 - bx0) * (by1 - by0) - inter
+        return inter / union if union > 0 else 0.0
+
+    def best_per_class(self, detections, cross_iou=0.55):
+        """클래스별 최고 점수 1개만 남긴다. 큐브는 색마다 하나뿐이라는 사전지식.
+
+        + **클래스 간 중복 제거**: NMS 는 클래스별 독립이라 같은 물리 큐브가 두 클래스
+        박스를 동시에 가질 수 있다 (예: 탑 위 노란 큐브가 약한 green 박스도 얻음 - 진짜
+        연두가 팔에 가려진 순간엔 그 오검이 green 의 '최고' 가 된다). 그 est 가 belief 를
+        노랑 위치로 끌고 가 로봇이 엉뚱한 곳으로 향한다. 서로 다른 클래스의 최고 박스가
+        크게 겹치면 같은 큐브다 - 점수 낮은 쪽을 버린다 (한 큐브 = 한 클래스).
+        """
         best = {}
         for d in detections:
             if d["class"] not in best or d["score"] > best[d["class"]]["score"]:
                 best[d["class"]] = d
+
+        for cls in sorted(best, key=lambda c: -best[c]["score"]):
+            if cls not in best:
+                continue
+            for other in [c for c in list(best) if c != cls]:
+                if other in best and self._iou(best[cls]["box"], best[other]["box"]) > cross_iou:
+                    if best[other]["score"] <= best[cls]["score"]:
+                        del best[other]
         return best

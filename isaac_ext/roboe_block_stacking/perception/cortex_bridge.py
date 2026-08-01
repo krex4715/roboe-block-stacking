@@ -103,6 +103,11 @@ class CortexPerceptionBridge:
         # - 유령 검출은 위치가 튀므로 일관성 요구가 필터가 된다.
         self.JUMP_SNAP = 0.05      # 이보다 큰 불일치는 점프로 취급
         self.JUMP_CONSIST = 0.03   # 연속 두 관측이 이 안이면 일관
+        # 동결 예외 임계. 처음엔 JUMP_SNAP(50mm)과 같았는데, 그러면 8~50mm 오차가
+        # EE 근처에서 영원히 동결되는 **좀비 밴드**가 생긴다 (실측: 39mm 오차로
+        # 파지를 계속 40mm 빗나가며 무한 반복). 파지 여유(~14mm)를 넘는 오차는
+        # 동결을 뚫고 EMA/스냅 경로로 교정되어야 한다.
+        self.FREEZE_BAND = 0.02
         # 스냅 쿨다운: 배치 평가 실측에서 실패 런의 스냅이 173~454회로 폭주했다.
         # 팔이 정지 자세로 가린 동안 오검이 '일관되게' 같은 곳을 가리키면 2연속 필터를
         # 통과해 진짜<->오검 사이를 진동하며 접근 목표를 계속 흔든다. 스냅 후 일정 시간
@@ -312,7 +317,7 @@ class CortexPerceptionBridge:
             #     사건이므로 아래 점프-일관 검사로 통과시켜 belief 가 따라가게 한다.
             raw_dis = float(np.linalg.norm(belief_p - p_arr))
             if (ee_p is not None and np.linalg.norm(belief_p - ee_p) < self.freeze_radius
-                    and raw_dis <= self.JUMP_SNAP):
+                    and raw_dis <= self.FREEZE_BAND):
                 self.stats["frozen"] += 1
                 self.last_reasons[name] = "조작 중 -> belief 동결"
                 continue
