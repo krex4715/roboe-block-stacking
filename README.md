@@ -26,9 +26,14 @@ Isaac Sim 5.1 시뮬레이터 안에서, 고정된 **ZED-X RGB-D 카메라**로 
 
 ---
 
+
+
+
+
+
 ## 1. 전체 구조 — 한 장으로 보기
 
-파이프라인은 4단계입니다. 카메라 프레임이 들어올 때마다 ①→④를 약 10Hz로 반복합니다.
+파이프라인은 4단계입니다. 카메라 프레임이 들어올 때마다 ①→④를 반복한다.
 
 ![전체 순서도](media/figures/pipeline_flowchart.png)
 
@@ -45,6 +50,10 @@ Cortex 는 Isaac Sim 의 로봇 의사결정 프레임워크로, "로봇이 믿�
 "실제 물리 세계"를 구분해서 다룹니다. 이 과제의 통합 지점은 Cortex 가 인식 연동용으로
 설계해 둔 `CortexObject.set_measured_pose()` API 하나이며, 의사결정 로직은 쌓기 순서
 설정 외에 수정하지 않았습니다.
+
+
+
+
 
 ## 2. 단계별 상세
 
@@ -125,6 +134,11 @@ yaw 는 0~90° 범위로 정규화합니다. (큐브가 회전된 채 놓이면 
 파지 성립 — 그 순간 belief 를 동결하고 큐브를 손에 강체 부착합니다. 그리퍼가 열리면
 놓은 것으로 보고 부착을 해제합니다. 별도 캘리브레이션이 필요 없습니다.
 
+
+
+
+
+
 ## 3. 확장 — Zero-shot 인식 4종 비교 (학습 없이 "말로" 검출)
 
 Zero-shot 검출기는 재학습 없이 **텍스트 프롬프트만으로** 새 물체를 찾는 모델입니다.
@@ -185,6 +199,12 @@ Zero-shot 검출기는 재학습 없이 **텍스트 프롬프트만으로** 새 
 백엔드에 맞춰 자동 전환됩니다. **Grounding DINO 만으로도 쌓기 완주**를 확인했습니다
 (zero-shot 인식이 초당 2~3회로 느려도 belief 구조가 흡수).
 
+
+
+
+
+
+
 ## 4. 검증 결과
 
 | 검증 | 결과 |
@@ -203,6 +223,11 @@ Zero-shot 검출기는 재학습 없이 **텍스트 프롬프트만으로** 새 
 그림: [`media/figures/trials_summary.png`](media/figures/trials_summary.png) ·
 [`media/figures/ablation_depth_correction.png`](media/figures/ablation_depth_correction.png) ·
 원자료: `media/m6/trials.csv`
+
+
+
+
+
 
 ## 5. 설치
 
@@ -250,6 +275,11 @@ training/.venv/bin/python training/verify_torchscript_decode.py     # 배포 전
 
 zero-shot 오프라인 비교 재현: `eval/zeroshot/run_*.py` → `summarize.py` (전부 학습 venv).
 
+
+
+
+
+
 ## 6. 실행
 
 ### 6.1 GUI (권장)
@@ -283,6 +313,11 @@ python standalone/verify_m4_perception.py               # 인식 정확도 측�
 python eval/test_decode_math.py                         # 단위 테스트 (GPU 불필요)
 ```
 
+
+
+
+
+
 ## 7. 저장소 구조
 
 | 경로 | 내용 |
@@ -299,6 +334,11 @@ python eval/test_decode_math.py                         # 단위 테스트 (GPU 
 | `eval/` | 배치 평가, zero-shot 비교, 단위 테스트, 그림 생성 |
 | `media/` | 데모 영상 · 그림 · 원자료 CSV |
 
+
+
+
+
+
 ## 8. 명세 해석 (가정 명시)
 
 - **"집기 순서" = 쌓는 순서**로 해석: 먼저 집는 빨강이 탑의 맨 아래.
@@ -307,6 +347,11 @@ python eval/test_decode_math.py                         # 단위 테스트 (GPU 
   (노랑과 가장 잘 구분되는 값을 렌더 픽셀로 선정, 혼동행렬로 검증)
 - **적재 위치**: GUI 입력 + 사전 유효성 검증 (로봇 도달 범위 0.30~0.75m,
   큐브 스폰 영역과 0.15m 초과 이격)
+
+
+
+
+
 
 ## 9. 한계와 향후 과제
 
@@ -318,6 +363,11 @@ python eval/test_decode_math.py                         # 단위 테스트 (GPU 
 - **yaw 만 추정**: 큐브가 바닥에 똑바로 놓였다고 가정 (기울어진 큐브는 범위 밖)
 - **zero-shot 백엔드는 시연·분석용 프로필**: YOLO-World 는 신뢰도 보정 문제로 라이브
   검출이 불안정하고, Qwen 은 초당 0.2회 수준 — 기본 백엔드의 대체가 아님 (§3 결론)
+
+
+
+
+
 
 ## 10. 문제 해결
 
