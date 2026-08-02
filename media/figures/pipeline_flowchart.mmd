@@ -1,0 +1,55 @@
+---
+config:
+  theme: base
+  flowchart:
+    wrappingWidth: 420
+    nodeSpacing: 40
+    rankSpacing: 42
+  themeVariables:
+    fontFamily: "Noto Sans CJK KR, Noto Sans KR, sans-serif"
+    fontSize: "15px"
+    primaryColor: "#eef4fb"
+    primaryBorderColor: "#4a7ab5"
+    primaryTextColor: "#1a2b3c"
+    lineColor: "#4a7ab5"
+    clusterBkg: "#f7f9fc"
+    clusterBorder: "#b9c8da"
+---
+flowchart TB
+    CAM["ZED-X 고정 카메라<br/>RGB + Depth 프레임<br/>(시뮬레이터 정답 좌표는 사용하지 않음)"]
+
+    subgraph S1["① AI 인식 — 색상 큐브 검출"]
+        DET["검출기 (GUI에서 실행 중 교체 가능)<br/><b>YOLOv8n 파인튜닝(기본)</b> · YOLO-World<br/>Grounding DINO · Qwen2.5-VL"]
+    end
+
+    subgraph S2["② 파지점 추정 — bbox → 3D 위치·자세"]
+        POS["<b>위치</b>: bbox 중앙 깊이 중앙값 → 역투영<br/>→ 광선-박스 교점으로 중심 보정 (오차 2.4mm)"]
+        ROT["<b>자세(yaw)</b>: 상면 픽셀을 바닥에 투영<br/>→ 최소 외접 사각형 (90° 대칭)"]
+    end
+
+    subgraph S3["③ 판단·제어 — Cortex"]
+        BRIDGE["Cortex Bridge<br/>신뢰도 게이트 · EMA 필터 · 안전장치"]
+        BELIEF["<b>Belief 세계 (고스트 큐브)</b><br/>로봇이 보는 유일한 세계"]
+        DECIDER["Block Stacking Decider<br/>빨→노→연→파 · 최소 회전 파지 자세 선택"]
+        MOTION["MotionCommander (RMPFlow)"]
+    end
+
+    subgraph S4["④ 파지 상태 판단 — 프로프리오셉션"]
+        GRASP["그리퍼 관절 폭이 큐브 크기(51.5mm)에서 안정<br/>+ 손끝이 목표 옆 → <b>잡음</b>: belief 동결·강체 부착<br/>그리퍼 열림 → <b>놓음</b>: 부착 해제"]
+    end
+
+    ROBOT["Franka 로봇 암<br/>물리 세계의 진짜 큐브를 집어 쌓는다"]
+
+    CAM -- "RGB" --> DET
+    CAM -- "Depth" --> POS
+    DET -- "클래스 + bbox" --> POS
+    DET -- "bbox 내부 깊이" --> ROT
+    POS --> BRIDGE
+    ROT --> BRIDGE
+    BRIDGE -- "set_measured_pose()" --> BELIEF
+    BELIEF --> DECIDER
+    DECIDER --> MOTION
+    MOTION --> ROBOT
+    ROBOT -. "관절 상태 (그리퍼 폭)" .-> GRASP
+    GRASP -. "조작 중에는 belief 를 건드리지 않는다" .-> BRIDGE
+    ROBOT -. "다음 프레임 (~10Hz 반복)" .-> CAM
