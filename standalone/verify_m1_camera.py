@@ -10,7 +10,7 @@ AI를 붙이기 **전에** 기하 체인이 맞는지부터 확정한다. 검출
 보정 3종(none/ray/box)을 동시에 비교해 "왜 보정이 필요한가"를 수치로 남긴다.
 
 실행:
-    conda activate isaacsim
+    conda activate isaacsim_roboe
     python standalone/verify_m1_camera.py            # 헤드리스
     python standalone/verify_m1_camera.py --gui      # 창 띄우기
 """

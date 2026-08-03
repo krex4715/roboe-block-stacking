@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # [ROBOE] E2E 성공률 매트릭스 - 인식 소스 4종 x 배치 2종 x 10회.
-#   conda activate isaacsim && bash eval/run_e2e_matrix.sh
+#   conda activate isaacsim_roboe && bash eval/run_e2e_matrix.sh
 #
 # 조합마다 SimulationApp 프로세스를 새로 띄운다 (GPU 상태 격리 - 특히 VLM 워커의
 # VRAM 이 다음 조합으로 새지 않게). 같은 --seed 라 random 배치의 스폰 시퀀스가

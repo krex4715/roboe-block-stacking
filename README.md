@@ -95,7 +95,7 @@ API 하나 — 의사결정 로직은 쌓기 순서 설정 외 무수정.
 
 ```bash
 # 1) Isaac Sim (최초 1회)
-conda create -n isaacsim python=3.11 -y && conda activate isaacsim
+conda create -n isaacsim_roboe python=3.11 -y && conda activate isaacsim_roboe
 pip install "isaacsim[all,extscache]==5.1.0" --extra-index-url https://pypi.nvidia.com
 
 # 2) 런타임 설치 — 학습된 모델이 저장소에 포함되어 있어 여기까지면 바로 실행 가능

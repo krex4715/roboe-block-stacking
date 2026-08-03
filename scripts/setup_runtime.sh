@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # [ROBOE] 런타임 설치 — isaacsim conda 환경을 활성화한 상태에서 실행한다.
-#   conda activate isaacsim && bash scripts/setup_runtime.sh
+#   conda activate isaacsim_roboe && bash scripts/setup_runtime.sh
 #
 # 하는 일: ① 추론 의존성 설치 ② GUI 예제 등록(심링크) ③ 단위 테스트로 자가 검증.
 # 재실행해도 안전하다(idempotent). Isaac Sim 자체 설치는 README §5.1 참조.
@@ -9,7 +9,7 @@ cd "$(dirname "$0")/.."
 
 # 0) 환경 확인 — isaacsim 환경이 아니면 중단
 if ! python -c "import isaacsim" 2>/dev/null; then
-    echo "[ERR] isaacsim 환경이 아닙니다. 'conda activate isaacsim' 후 다시 실행하세요." >&2
+    echo "[ERR] isaacsim 환경이 아닙니다. 'conda activate isaacsim_roboe' 후 다시 실행하세요." >&2
     exit 1
 fi
 
