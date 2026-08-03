@@ -1,0 +1,11 @@
+trial,backend,layout,success,steps,sim_s,wall_s,worker_load_s,behavior_done,max_xy_off_mm,init_belief_err_mm,order,grasps,ghost_rejects,published,snapped,reacquired
+0,gdino,default,True,1694,25.7,54.4,4.6,True,4.5,0.0,RedCube->YellowCube->GreenCube->BlueCube,4,2,13,14,2
+1,gdino,default,True,1706,25.9,49.8,4.6,True,3.8,0.0,RedCube->YellowCube->GreenCube->BlueCube,4,2,12,12,1
+2,gdino,default,True,1695,25.7,49.3,4.6,True,4.3,0.0,RedCube->YellowCube->GreenCube->BlueCube,4,2,12,14,3
+3,gdino,default,True,1695,25.7,49.8,4.6,True,4.6,0.0,RedCube->YellowCube->GreenCube->BlueCube,4,1,13,11,2
+4,gdino,default,True,1701,25.8,49.8,4.5,True,4.7,0.0,RedCube->YellowCube->GreenCube->BlueCube,4,1,10,15,2
+5,gdino,default,True,1704,25.9,50.6,4.6,True,4.8,0.0,RedCube->YellowCube->GreenCube->BlueCube,4,1,11,7,2
+6,gdino,default,True,1732,26.4,51.1,4.6,True,4.5,0.0,RedCube->YellowCube->GreenCube->BlueCube,4,2,14,11,3
+7,gdino,default,True,1693,25.7,50.3,4.5,True,3.9,0.0,RedCube->YellowCube->GreenCube->BlueCube,4,1,10,13,2
+8,gdino,default,True,1700,25.8,50.1,4.7,True,3.9,0.0,RedCube->YellowCube->GreenCube->BlueCube,4,2,13,14,1
+9,gdino,default,True,1723,26.2,51.3,4.7,True,3.9,0.0,RedCube->YellowCube->GreenCube->BlueCube,4,1,11,12,1

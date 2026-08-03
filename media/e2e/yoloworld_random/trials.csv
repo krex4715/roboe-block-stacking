@@ -1,0 +1,11 @@
+trial,backend,layout,success,steps,sim_s,wall_s,worker_load_s,behavior_done,max_xy_off_mm,init_belief_err_mm,order,grasps,ghost_rejects,published,snapped,reacquired
+0,yoloworld,random,True,1345,19.9,38.8,0.0,True,1.7,574.5,RedCube->YellowCube->GreenCube->BlueCube,4,1,6,6,0
+1,yoloworld,random,True,1755,26.7,43.2,0.0,True,6.1,249.1,RedCube->YellowCube->GreenCube->BlueCube,4,2,14,14,0
+2,yoloworld,random,True,1436,21.4,35.8,0.0,True,1.4,438.5,RedCube->YellowCube->GreenCube->BlueCube,4,1,4,4,0
+3,yoloworld,random,True,1588,23.9,39.8,0.0,True,2.8,264.7,RedCube->YellowCube->GreenCube->BlueCube,4,0,4,4,0
+4,yoloworld,random,True,1484,22.2,37.3,0.0,True,3.5,290.6,RedCube->YellowCube->GreenCube->BlueCube,4,0,9,7,2
+5,yoloworld,random,False,5999,100.0,137.9,0.0,False,609.8,407.0,RedCube->YellowCube->BlueCube->GreenCube,3,1,4,4,0
+6,yoloworld,random,False,5999,100.0,144.7,0.0,False,767.3,284.3,YellowCube->GreenCube->RedCube->BlueCube,0,0,59,59,0
+7,yoloworld,random,False,5999,100.0,141.0,0.0,False,638.8,410.2,GreenCube->RedCube->BlueCube->YellowCube,1,0,5,5,0
+8,yoloworld,random,True,1506,22.6,38.7,0.0,True,3.8,255.9,RedCube->YellowCube->GreenCube->BlueCube,4,8,5,4,1
+9,yoloworld,random,True,2416,37.8,57.1,0.0,True,3.1,432.7,RedCube->YellowCube->GreenCube->BlueCube,4,0,5,4,1

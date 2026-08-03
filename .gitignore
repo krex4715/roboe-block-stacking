@@ -22,6 +22,10 @@ training/*.onnx
 # 재생성: training/.venv/bin/python training/export_yoloworld.py (meta 는 커밋됨)
 models/yoloworld_v2s.torchscript
 
+# E2E 매트릭스 원본 영상·로그 (대표 영상은 media/demo/ 에 h264 로 커밋, CSV 는 커밋)
+media/e2e/*.log
+media/e2e/**/*.mp4
+
 # Python
 __pycache__/
 *.pyc

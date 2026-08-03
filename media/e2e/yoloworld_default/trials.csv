@@ -1,0 +1,11 @@
+trial,backend,layout,success,steps,sim_s,wall_s,worker_load_s,behavior_done,max_xy_off_mm,init_belief_err_mm,order,grasps,ghost_rejects,published,snapped,reacquired
+0,yoloworld,default,False,5999,100.0,151.3,0.0,False,832.2,0.0,GreenCube->BlueCube->RedCube->YellowCube,2,0,3,2,1
+1,yoloworld,default,True,1686,25.6,41.1,0.0,True,4.4,0.0,RedCube->YellowCube->GreenCube->BlueCube,4,4,1,0,1
+2,yoloworld,default,True,1686,25.6,40.9,0.0,True,3.8,0.0,RedCube->YellowCube->GreenCube->BlueCube,4,5,0,0,0
+3,yoloworld,default,False,5999,100.0,144.6,0.0,False,832.2,0.0,GreenCube->BlueCube->RedCube->YellowCube,2,0,2,2,0
+4,yoloworld,default,False,5999,100.0,138.9,0.0,False,832.2,0.0,GreenCube->BlueCube->RedCube->YellowCube,2,1,3,2,1
+5,yoloworld,default,False,5999,100.0,141.1,0.0,False,723.6,0.0,RedCube->BlueCube->YellowCube->GreenCube,3,3,1,1,1
+6,yoloworld,default,True,1678,25.4,42.0,0.0,True,3.7,0.0,RedCube->YellowCube->GreenCube->BlueCube,4,4,1,0,1
+7,yoloworld,default,True,1678,25.4,42.8,0.0,True,3.9,0.0,RedCube->YellowCube->GreenCube->BlueCube,4,6,1,0,1
+8,yoloworld,default,True,1695,25.7,42.5,0.0,True,4.2,0.0,RedCube->YellowCube->GreenCube->BlueCube,4,4,3,2,1
+9,yoloworld,default,True,1688,25.6,41.8,0.0,True,3.8,0.0,RedCube->YellowCube->GreenCube->BlueCube,4,4,3,2,1

@@ -2,28 +2,35 @@
 
 Isaac Sim 5.1 위에서, 고정된 **ZED-X RGB-D 카메라**와 **AI 검출 모델**만으로 색상 큐브
 4개를 인식해, **Franka 암**이 **빨강 → 노랑 → 연두 → 파랑** 순서로 사용자가 지정한
-위치에 쌓는 프레임워크입니다.
+위치에 쌓는 프레임워크. 전제 — 로봇은 시뮬레이터가 알고 있는 정답 좌표를 읽지 않는다
 
-**전제 — 로봇은 시뮬레이터가 알고 있는 정답 좌표를 읽지 않습니다.**
-큐브의 위치와 자세는 오직 카메라 영상과 AI 인식으로만 알아냅니다. 이 전제 아래
-두 가지 문제를 완주합니다.
 
-> 명세의 "집기 순서"는 "쌓는 순서"로 해석했습니다 — 먼저 집는 빨강이 탑의 맨 아래.
-> (반대 해석이면 `behavior/block_stacking_behavior.py` 의 `order_preference` 한 줄로 대응)
 
-## 결과 — 두 가지 배치 모두 완주
+## 결과 — 인식 소스 4종 × 배치 2종, 각 10회 실측
 
 | 기본 배치 (과제 명세 그대로) | 랜덤 배치 (스트레스) |
-|:---:|:---:|
-| [![기본 배치 데모](media/demo/demo_thumbnail.png)](media/demo/demo_stacking.mp4) | [![랜덤 배치 데모](media/demo/demo_thumbnail_random.png)](media/m6/trial0_zed.mp4) |
-| 큐브 4개 일자 정위치 | 위치·회전 무작위 + 초기 belief 평균 36cm 오염 |
-| **5/5 완주**, 회당 약 35초 | **10/10 완주**, 평균 44.9초 |
+| :---: | :---: |
+| [![기본 배치 데모](media/demo/demo_thumbnail.png)](media/demo/demo_default.mp4) | [![랜덤 배치 데모](media/demo/demo_thumbnail_random.png)](media/demo/demo_random.mp4) |
+| 큐브 4개 일자 정위치 | 위치·회전 무작위 + 로봇의 초기 믿음(belief)을 평균 36cm 틀리게 시작 — **인식이 스스로 교정해야만 성공** |
 
-- 완성 탑의 중심 정렬 오차 최대 **7.4mm** (큐브 한 변 51.5mm)
-- AI 인식 → 3D 위치 오차 평균 **2.4mm** (95백분위 4.2mm, n=120)
-- 랜덤 배치는 과제 범위를 넘어선 조건입니다: 매회 큐브를 무작위 위치·회전으로 흩고
-  로봇의 초기 믿음(belief)을 평균 36cm 틀리게 시작시켜, **인식이 스스로 교정해야만
-  성공**하도록 설계했습니다. 원자료: `media/m6/trials.csv`
+같은 파이프라인에서 **인식 소스만 바꿔** 두 배치를 각 10회씩 돌린 성공률
+(랜덤 배치는 같은 seed = 4개 소스가 **동일한 10개 배치**로 평가됨):
+
+| 인식 소스 | 기본 배치 | 랜덤 배치 | 대표 영상* |
+| --- | :---: | :---: | :---: |
+| **YOLOv8n 파인튜닝** ✅ 기본 | **10/10** | **10/10** | [▶ 보기](media/demo/demo_random.mp4) |
+| Grounding DINO (tiny) | **10/10** | 4/10 | [▶ 보기](media/demo/infer_gdino.mp4) |
+| Qwen2.5-VL-3B | **10/10** | **10/10** | [▶ 보기](media/demo/infer_qwen.mp4) |
+| YOLO-World v2 (s) | 6/10 | 7/10 | [▶ 보기](media/demo/infer_yoloworld.mp4) |
+
+(\*) 4편 모두 **같은 랜덤 배치**에서 해당 소스가 실제 완주한 회차의 ZED 카메라 영상
+(검출 박스 오버레이 포함) — 소스 간 직접 비교 가능.
+
+- 실패 13회는 전부 "특정 큐브 재검출 실패 → 정체 → 타임아웃(100초)". **완성된 탑이
+  무너진 사례는 0회** — 오검출은 브리지 안전장치가 걸러냈다 (Qwen 은 회당 최대 45회 기각)
+- 파인튜닝 기준 완주 시간: 기본 평균 25.6초 / 랜덤 평균 22.0초. 완성 탑의 중심 정렬
+  오차 최대 **5.3mm** (큐브 한 변 51.5mm), AI 인식 → 3D 위치 오차 평균 **2.4mm**
+- 원자료: `media/e2e/<소스>_<배치>/trials.csv` (회당 시간·파지 횟수·게이트 통계)
 
 ## 전체 흐름
 
@@ -61,9 +68,6 @@ API 하나이며, 의사결정 로직은 쌓기 순서 설정 외에 수정하�
 비율 — 쌓기 성공을 가장 직접 예측하는 지표. (†) 장당 약 4초라 30장 서브셋으로 측정.
 비교 그림: [`media/figures/zeroshot_compare.png`](media/figures/zeroshot_compare.png)
 
-<!-- TODO(영상): 각 방식 대표 inference 영상 — media/demo/infer_{finetuned,gdino,qwen,yoloworld}.mp4
-     촬영 후 위 표에 "대표 영상" 열로 추가 -->
-
 **분석 요약**
 
 - **파인튜닝을 기본으로 채택**: 클래스가 고정되고 실시간 제어 루프 안에서 도는 이 과제
@@ -72,8 +76,12 @@ API 하나이며, 의사결정 로직은 쌓기 순서 설정 외에 수정하�
 - **zero-shot 의 약점 실측**: 연두↔노랑 같은 미세 색 구분에서 흔들리고(연두→노랑 오인
   67회), 프롬프트 단어 하나가 하이퍼파라미터이며("green"→"light green" 에 mAP50
   0.525→0.680), 신뢰도가 보정돼 있지 않아 고정 게이트에 그대로 꽂을 수 없음
-- **zero-shot 만으로도 쌓기 완주**: Grounding DINO 단독 E2E 완주 확인 — 인식이 초당
-  2~3회로 느려져도 belief 구조가 흡수
+- **오프라인 지표가 E2E 성공률을 그대로 예측하지 못함** (위 결과 표): 기본 배치는
+  mAP 순서와 일치하지만(GDINO·Qwen 10/10, YOLO-World 6/10), 랜덤 배치에서는 mAP 0.878 의
+  GDINO 가 4/10 으로 역전당하고 가장 느린 Qwen(~0.2Hz)이 10/10 — 시스템 성공률은
+  정확도·지연·신뢰도 보정·안전장치의 합작이라 **E2E 실측 없이는 알 수 없다**.
+  YOLO-World 의 실패 대부분은 3번째 큐브(연두) 재검출 정체 — 오프라인의 연두 혼동이
+  실제 실패 원인으로 그대로 이어진 사례
 - **결론 — 대체가 아니라 역할 분담**: 정답 라벨이 없는 실환경에서는 zero-shot 이
   자동 라벨링 교사, 소형 파인튜닝 모델이 실시간 학생 — 한 파이프라인의 두 단계
 
@@ -109,8 +117,9 @@ bash scripts/setup_zeroshot.sh
 **GUI 없이 (배치 평가·재현)**:
 
 ```bash
-python standalone/run_stacking_perception.py            # 기본 배치 E2E 쌓기
-python eval/run_trials.py --trials 10 --record          # 랜덤 배치 10회 평가 + 영상
+python standalone/run_stacking_perception.py                  # 기본 배치 E2E 쌓기
+python eval/run_trials.py --backend gdino --layout random     # 소스/배치 골라 10회 평가
+bash eval/run_e2e_matrix.sh                                   # 위 성공률 매트릭스 전체 재현
 ```
 
 zero-shot 성능 비교 재현: `eval/zeroshot/run_*.py` → `summarize.py` (학습 venv,

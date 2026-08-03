@@ -1,0 +1,11 @@
+trial,backend,layout,success,steps,sim_s,wall_s,worker_load_s,behavior_done,max_xy_off_mm,init_belief_err_mm,order,grasps,ghost_rejects,published,snapped,reacquired
+0,finetuned,default,True,1670,25.3,45.4,0.0,True,4.6,0.0,RedCube->YellowCube->GreenCube->BlueCube,4,0,7,0,0
+1,finetuned,default,True,1688,25.6,40.3,0.0,True,3.5,0.0,RedCube->YellowCube->GreenCube->BlueCube,4,0,7,0,0
+2,finetuned,default,True,1698,25.8,39.6,0.0,True,4.7,0.0,RedCube->YellowCube->GreenCube->BlueCube,4,0,3,0,0
+3,finetuned,default,True,1687,25.6,39.7,0.0,True,3.9,0.0,RedCube->YellowCube->GreenCube->BlueCube,4,0,5,0,0
+4,finetuned,default,True,1689,25.6,39.8,0.0,True,3.9,0.0,RedCube->YellowCube->GreenCube->BlueCube,4,0,5,0,0
+5,finetuned,default,True,1695,25.7,40.2,0.0,True,4.6,0.0,RedCube->YellowCube->GreenCube->BlueCube,4,0,4,0,0
+6,finetuned,default,True,1687,25.6,39.7,0.0,True,4.3,0.0,RedCube->YellowCube->GreenCube->BlueCube,4,0,6,0,0
+7,finetuned,default,True,1688,25.6,40.4,0.0,True,4.2,0.0,RedCube->YellowCube->GreenCube->BlueCube,4,0,7,0,0
+8,finetuned,default,True,1687,25.6,40.7,0.0,True,4.5,0.0,RedCube->YellowCube->GreenCube->BlueCube,4,0,7,0,0
+9,finetuned,default,True,1685,25.6,40.9,0.0,True,5.1,0.0,RedCube->YellowCube->GreenCube->BlueCube,4,0,4,0,0

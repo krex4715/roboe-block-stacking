@@ -1,0 +1,11 @@
+trial,backend,layout,success,steps,sim_s,wall_s,worker_load_s,behavior_done,max_xy_off_mm,init_belief_err_mm,order,grasps,ghost_rejects,published,snapped,reacquired
+0,qwen,random,True,1746,26.6,58.5,7.6,True,3.0,574.5,RedCube->YellowCube->GreenCube->BlueCube,4,3,10,16,3
+1,qwen,random,True,1972,30.3,60.9,7.9,True,3.0,249.1,RedCube->YellowCube->GreenCube->BlueCube,4,43,8,11,2
+2,qwen,random,True,1896,29.1,58.5,7.6,True,4.5,438.5,RedCube->YellowCube->GreenCube->BlueCube,4,18,7,9,2
+3,qwen,random,True,2108,31.5,64.2,7.6,True,4.6,264.7,RedCube->YellowCube->GreenCube->BlueCube,4,14,11,18,3
+4,qwen,random,True,1926,29.6,60.8,8.0,True,14.6,290.6,RedCube->YellowCube->GreenCube->BlueCube,4,44,9,9,2
+5,qwen,random,True,2971,47.0,83.2,8.0,True,3.0,407.0,RedCube->YellowCube->GreenCube->BlueCube,4,21,13,13,1
+6,qwen,random,True,1759,26.8,55.1,8.1,True,3.8,284.3,RedCube->YellowCube->GreenCube->BlueCube,4,15,10,12,3
+7,qwen,random,True,2044,31.6,63.0,7.9,True,5.5,410.2,RedCube->YellowCube->GreenCube->BlueCube,4,36,12,14,3
+8,qwen,random,True,1861,28.5,58.1,8.1,True,4.1,255.9,RedCube->YellowCube->GreenCube->BlueCube,4,3,12,15,3
+9,qwen,random,True,1845,28.2,56.8,7.7,True,3.7,432.7,RedCube->YellowCube->GreenCube->BlueCube,4,21,11,11,3
