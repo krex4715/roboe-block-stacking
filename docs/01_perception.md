@@ -48,13 +48,13 @@ Isaac Sim **Replicator**(렌더링하면서 정답 박스·클래스까지 자�
 | Grounding DINO | 학습 venv 서브프로세스 워커 (비동기)                    | 0.25           |
 | Qwen2.5-VL     | 〃                                          | (게이트 무의미 — 아래) |
 
-(\*) zero-shot 신뢰도는 보정이 안 돼 있음 (YOLO-World 정검출 신뢰도 중앙값 0.0105) —
-게이트를 모델별로 자동 전환. Qwen 은 생성형이라 신뢰도 개념이 없어 고정 0.99 출력 —
-보호는 [③](03_decision_control.md)의 작업공간·동결 게이트가 전담.
+(\*) zero-shot 신뢰도는 보정이 안 되어 있음 (YOLO-World 정검출 신뢰도 중앙값 0.0105).
+그래서 Threshold 를 모델별로 자동 전환함. Qwen 은 생성형이라 신뢰도 개념이 없어
+고정 0.99 로 출력되고, 보호는 [③](03_decision_control.md)의 작업공간/동결 게이트가 담당.
 
-느린 워커(GDINO 177ms, Qwen ~4s)는 **비동기 우편함** 구조: 놀고 있을 때만 프레임을
-받고, 항상 "가장 최근 완성본"을 반환 — 시뮬 루프를 절대 막지 않음. VRAM 은 순차 점유
-(전환 시 이전 워커 먼저 종료 — 16GB 에서 OOM 실측 후 원칙화).
+느린 워커(GDINO 177ms, Qwen ~4s)는 비동기 mailbox 구조. 워커가 놀고 있을 때만
+프레임을 받고 항상 가장 최근 결과를 반환하므로 시뮬 루프를 막지 않음. VRAM 은
+순차 점유 (전환 시 이전 워커를 먼저 종료. 16GB 에서 동시 점유 시 OOM 실측).
 
 **코드**: `perception/detector.py` (디코드+NMS) · `perception/detector_hub.py` (4종 전환) ·
 `sdg/generate_dataset.py` (데이터 생성) · `training/train.py` (학습+export)
