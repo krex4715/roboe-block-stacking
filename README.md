@@ -122,6 +122,12 @@ bash scripts/setup_zeroshot.sh
 **GUI 실행**: `isaacsim` → Window → Examples → Robotics Examples → Custom →
 **ROBOE Block Stacking** → `Tower X/Y` 입력 → `LOAD` → `Start`
 
+![GUI 안내 — 예제 위치 · 컨트롤 패널 · AI 검출 뷰](media/figures/gui_guide_full.png)
+
+컨트롤 패널 확대 — **AI Source**(인식 소스 4종 전환) · **LOAD** · **RANDOMIZE** · **START**:
+
+![컨트롤 패널 확대](media/figures/gui_guide_panel.png)
+
 - **인식 소스 드롭다운** — 4종을 실행 중 전환 (신뢰도 게이트 자동 조정, GDINO/Qwen 은
   첫 선택 시 가중치 자동 다운로드)
 - **AI 검출 뷰 창** — 검출기가 보는 이미지 + 박스/점수 실시간 표시
