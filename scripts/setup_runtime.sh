@@ -7,9 +7,19 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# 0) 환경 확인 — isaacsim 환경이 아니면 중단
+# 0) NVIDIA Omniverse EULA 동의 등록 + 환경 확인.
+#    최초 `import isaacsim` 시 EULA 대화형 프롬프트가 뜨는데, 스크립트/헤드리스에서는
+#    입력을 받을 수 없어 실패한다 (클린 환경에서 실측). 이 스크립트 실행을 동의로
+#    처리하고, conda 활성화 훅에 등록해 이후 GUI/헤드리스 실행에도 적용한다.
+#    EULA 전문: https://docs.omniverse.nvidia.com/platform/latest/common/NVIDIA_Omniverse_License_Agreement.html
+export OMNI_KIT_ACCEPT_EULA=YES
+mkdir -p "$CONDA_PREFIX/etc/conda/activate.d"
+echo 'export OMNI_KIT_ACCEPT_EULA=YES' > "$CONDA_PREFIX/etc/conda/activate.d/roboe_eula.sh"
+echo "[i] NVIDIA Omniverse EULA 동의 처리 + conda 활성화 훅 등록 (OMNI_KIT_ACCEPT_EULA=YES)"
+
 if ! python -c "import isaacsim" 2>/dev/null; then
-    echo "[ERR] isaacsim 환경이 아닙니다. 'conda activate isaacsim_roboe' 후 다시 실행하세요." >&2
+    echo "[ERR] 'import isaacsim' 실패 — isaacsim_roboe 환경인지 확인하세요 (conda activate isaacsim_roboe)." >&2
+    echo "      Isaac Sim 미설치라면 README '직접 실행하기' 1) 을 먼저 실행하세요." >&2
     exit 1
 fi
 
