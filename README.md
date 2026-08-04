@@ -115,7 +115,7 @@ pip install "isaacsim[all,extscache]==5.1.0" --extra-index-url https://pypi.nvid
 #    포함되어 있어 여기까지면 바로 실행 가능
 bash scripts/setup_runtime.sh
 
-# 3) zero-shot 백엔드 3종 (선택)
+# 3) zero-shot 백엔드 3종
 bash scripts/setup_zeroshot.sh
 ```
 
