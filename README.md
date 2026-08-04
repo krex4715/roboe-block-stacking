@@ -15,18 +15,20 @@ Isaac Sim 5.1 위에서, 고정된 **ZED-X RGB-D 카메라**와 **AI 검출 모�
 
 | 기본 배치 (과제 명세 그대로) | 랜덤 배치 (스트레스) |
 | :---: | :---: |
-| [![기본 배치 데모](media/demo/demo_thumbnail.png)](media/demo/demo_default.mp4) | [![랜덤 배치 데모](media/demo/demo_thumbnail_random.png)](media/demo/demo_random.mp4) |
+| [![기본 배치 데모](media/demo/demo_default.gif)](media/demo/demo_default.mp4) | [![랜덤 배치 데모](media/demo/demo_random.gif)](media/demo/demo_random.mp4) |
 | 큐브 4개 일자 정위치 | 위치·회전 무작위 + 로봇의 초기 믿음(belief)을 평균 36cm 틀리게 시작 — **인식이 스스로 교정해야만 성공** |
+
+(움직이는 미리보기 = GIF. 클릭하면 고화질 mp4 원본)
 
 같은 파이프라인에서 **인식 소스만 바꿔** 두 배치를 각 10회씩 돌린 성공률
 (랜덤 배치는 같은 seed = 4개 소스가 **동일한 10개 배치**로 평가됨):
 
 | 인식 소스 | 기본 배치 | 랜덤 배치 | 대표 영상* |
 | --- | :---: | :---: | :---: |
-| **YOLOv8n 파인튜닝** ✅ 기본 | **10/10** | **10/10** | [▶ 보기](media/demo/demo_random.mp4) |
-| Grounding DINO (tiny) | **10/10** | 4/10 | [▶ 보기](media/demo/infer_gdino.mp4) |
-| Qwen2.5-VL-3B | **10/10** | **10/10** | [▶ 보기](media/demo/infer_qwen.mp4) |
-| YOLO-World v2 (s) | 6/10 | 7/10 | [▶ 보기](media/demo/infer_yoloworld.mp4) |
+| **YOLOv8n 파인튜닝** ✅ 기본 | **10/10** | **10/10** | [▶ 보기](media/demo/demo_random.gif) |
+| Grounding DINO (tiny) | **10/10** | 4/10 | [▶ 보기](media/demo/infer_gdino.gif) |
+| Qwen2.5-VL-3B | **10/10** | **10/10** | [▶ 보기](media/demo/infer_qwen.gif) |
+| YOLO-World v2 (s) | 6/10 | 7/10 | [▶ 보기](media/demo/infer_yoloworld.gif) |
 
 (\*) 4편 모두 **같은 랜덤 배치**에서 해당 소스가 실제 완주한 회차의 ZED 카메라 영상
 (검출 박스 오버레이 포함) — 소스 간 직접 비교 가능.
