@@ -1,24 +1,51 @@
 # [Take-home Task] AI Vision 기반 Block Stacking
 
-Isaac Sim 5.1 위에서, 고정된 **ZED-X RGB-D 카메라**와 **AI 검출 모델**만으로 색상 큐브
-4개를 인식해, **Franka 암**이 **빨강 → 노랑 → 연두 → 파랑** 순서로 사용자가 지정한
-위치에 쌓는 프레임워크. 전제 — 로봇은 시뮬레이터가 알고 있는 정답 좌표를 읽지 않는다
+Isaac Sim 5.1 환경에서
 
-**제출물 3종 바로가기** :
-[**소스코드**](소스코드.md) ·
-[**구현 설명 문서**](구현설명문서.md) ·
-[**실행 영상**](실행영상.md)
+고정된 **ZED-X RGB-D 카메라**와 **AI 검출 모델**만으로 색상 큐브 4개를 인식.
+
+**Franka 암**이 **빨강 → 노랑 → 연두 → 파랑** 순서로 사용자가 지정한
+위치에 쌓는 프레임워크. 
 
 
 
-## 결과 — 인식 소스 4종 × 배치 2종, 각 10회 실측
 
-| 기본 배치 (과제 명세 그대로) | 랜덤 배치 (스트레스) |
+**제출물** :
+
+- [**소스코드**](소스코드.md)
+- [**구현 설명 문서**](구현설명문서.md)
+- [**실행 영상**](실행영상.md)
+
+
+
+
+
+## Result 
+
+> **결과 측정 방식** — AI Perception 4종 × 큐브 배치 2종, 총 8개 경우의 수에 대한 각각 10회 성공/실패여부
+
+
+AI기반 Perception 방식은 YOLO+SDG 외에 VLM기반 3가지 방식 총 4가지 방식으로 했고, 각각의 성능을 비교하고자 하였으며
+
+기본적으로 인식을 수행해서 빨, 노, 연, 파 순서대로 쌓는것에 대해
+과제에 명세된 환경으로는, 이 4가지 방식의 성능을 비교하기 어려워
+
+
+문제의 상황을 조금더 실제 환경처럼 구성 (Advanced Ver.)해서도 함께 비교해서 풀었습니다.
+
+
+
+
+| 기본 배치 (과제 명세) | 랜덤 배치 (Advanced Ver.) |
 | :---: | :---: |
 | [![기본 배치 데모](media/demo/demo_default.gif)](media/demo/demo_default.mp4) | [![랜덤 배치 데모](media/demo/demo_random.gif)](media/demo/demo_random.mp4) |
 | 큐브 4개 일자 정위치 | 위치·회전 무작위 + 초기 belief 를 평균 36cm 오염시켜 시작 (인식이 교정해야 성공하는 조건) |
 
-(움직이는 미리보기 = GIF. 클릭하면 고화질 mp4 원본)
+
+(클릭하면 고화질 mp4 원본이 나옵니다)
+
+
+
 
 같은 파이프라인에서 인식 소스만 바꿔 두 배치를 각 10회씩 돌린 성공률.
 랜덤 배치는 seed 를 고정해서 4개 소스가 동일한 10개 배치로 평가됨:
@@ -30,8 +57,14 @@ Isaac Sim 5.1 위에서, 고정된 **ZED-X RGB-D 카메라**와 **AI 검출 모�
 | Qwen2.5-VL-3B | **10/10** | **10/10** |
 | YOLO-World v2 (s) | 6/10 | 7/10 |
 
-인식 소스별 대표 영상. 4편 모두 같은 랜덤 배치에서 실제 완주한 회차라 소스 간
-직접 비교가 됨 (ZED 카메라 시점 + 검출 오버레이):
+
+
+
+## AI Perception 소스별 대표 영상
+
+4편 모두 큐브 배치 배치에서 성능을 비교하여
+소스 간 직접 성공/실패 여부를 비교가능 (ZED 카메라 시점 + 검출 오버레이):
+
 
 | YOLOv8n 파인튜닝 (10/10 · 10/10) | Grounding DINO (10/10 · 4/10) |
 | :---: | :---: |
@@ -39,29 +72,31 @@ Isaac Sim 5.1 위에서, 고정된 **ZED-X RGB-D 카메라**와 **AI 검출 모�
 | **Qwen2.5-VL-3B (10/10 · 10/10)** | **YOLO-World v2 (6/10 · 7/10)** |
 | [![Qwen2.5-VL](media/demo/infer_qwen.gif)](media/demo/infer_qwen.mp4) | [![YOLO-World](media/demo/infer_yoloworld.gif)](media/demo/infer_yoloworld.mp4) |
 
-- 실패 13회는 전부 특정 큐브 재검출 실패로 인한 정체 후 타임아웃(100초). 완성된 탑이
-  무너진 사례는 없음 (오검출은 브리지 안전장치가 차단, Qwen 은 회당 최대 45회 기각)
-- 파인튜닝 기준 완주 시간: 기본 평균 25.6초 / 랜덤 평균 22.0초. 완성 탑의 중심 정렬
+- 실패 13회는 전부 특정 큐브 인식 실패로 인한 정지 후 타임아웃(100초).
+- YOLO+SDG 방식 기준 완주 시간: 기본배치 평균 25.6초 / 랜덤배치(Advanced Ver.) 평균 22.0초. 완성 탑의 중심 정렬
   오차 최대 5.3mm (큐브 한 변 51.5mm), AI 인식 → 3D 위치 오차 평균 2.4mm
 - 원자료: `media/e2e/<소스>_<배치>/trials.csv` (회당 시간·파지 횟수·게이트 통계)
 
 ## 전체 흐름
 
-카메라 프레임이 들어올 때마다 ①→④를 반복함. 단계별 로직 상세는 각 링크 문서에.
+Camera Vision 1Hz당 ①→④를 반복. 
 
-- **[① AI 인식](docs/01_perception.md)** — RGB 이미지에서 큐브의 클래스(색)와 바운딩박스를 검출
-- **[② 파지점 추정](docs/02_grasp_point.md)** — 바운딩박스 + 깊이(Depth)로 3D 위치(x, y, z)와 자세(yaw)를 복원.
-  깊이는 큐브 "앞면"까지의 거리이므로 광선-정육면체 교점 공식으로 중심을 보정
-  (보정 전 오차 28.3mm → 보정 후 2.4mm)
-- **[③ 판단·제어](docs/03_decision_control.md)** — 인식 결과를 안전장치(신뢰도 게이트 · EMA 필터 · 조작 중 동결 ·
-  작업공간 게이트 · 탑 보호)로 걸러 로봇의 믿음(belief)을 갱신하고, 의사결정 로직이
-  다음 행동을 골라 로봇을 움직임
-- **[④ 파지 판단](docs/04_grasp_state.md)** — 시뮬레이터에 묻지 않고, 그리퍼 관절 폭(프로프리오셉션)으로
-  "잡았다/놓았다"를 스스로 판정
+단계별 로직 상세는 각 링크 문서에 기재함.
+
+
+
+- **[① AI 인식](docs/01_perception.md)** — RGB 데이터로부터 큐브의 Class (색), 그리고 Bounding Box를 검출
+- **[② 파지점 추정](docs/02_grasp_point.md)** — Bounding Box + Depth로 Position (x, y, z)과 Orientation(yaw)을 추정.
+- **[③ 판단·제어](docs/03_decision_control.md)** — Perception 결과를 안전장치(신뢰도 게이트 · EMA 필터 · 조작 중 동결 · 작업공간 게이트 · 탑 보호)로 걸러 로봇이 인식하는 Belief 쪽 데이터를 갱신하고, 다음 행동을 유도 로봇을 움직임
+- **[④ 파지 판단](docs/04_grasp_state.md)** —그리퍼 관절 폭(프로프리오셉션)으로 "잡았다/놓았다"를 스스로 판정
 
 ![전체 순서도](media/figures/pipeline_flowchart.png)
 
-베이스는 Isaac Sim 내장 Franka **Cortex** 예제(Block Stacking, Apache-2.0).
+
+
+
+기본 Base는 Isaac Sim 내장 Franka **Cortex** 예제(Block Stacking, Apache-2.0).
+
 통합 지점은 Cortex 가 인식 연동용으로 제공하는 `CortexObject.set_measured_pose()`
 API 하나이고, 의사결정 로직은 쌓기 순서 설정 외에는 수정하지 않음.
 
@@ -98,7 +133,33 @@ API 하나이고, 의사결정 로직은 쌓기 순서 설정 외에는 수정�
 - 결론은 대체가 아니라 역할 분담. 정답 라벨이 없는 실환경에서는 zero-shot 을
   auto-labeling 에 쓰고, 소형 파인튜닝 모델을 실시간 추론에 쓰는 구성이 자연스러움
 
-프롬프트 원문과 채점 코드는 `eval/zeroshot/`, 인식 파이프라인 구현은
+각 방식별 입력 Prompt (원문 그대로):
+
+**YOLO-World** — 클래스 어휘 목록. 실행 전에 한 번만 CLIP 으로 임베딩해서 모델에
+bake 함 (그래서 빠름):
+
+```python
+["red cube", "yellow cube", "light green cube", "blue cube"]
+```
+
+**Grounding DINO** — 마침표로 구분한 캡션 한 줄. 매 프레임 텍스트를 같이 인코딩:
+
+```python
+"a red cube. a yellow cube. a green cube. a blue cube."
+```
+
+**Qwen2.5-VL** — 챗봇형 모델이라 출력 형식까지 지정한 지시문:
+
+```python
+"Detect every small colored cube in this image. There are up to four cubes: "
+"red, yellow, green (light green), and blue. "
+'Output ONLY a JSON array like [{"bbox_2d": [x1, y1, x2, y2], "label": "red cube"}] '
+"with one entry per cube. No other text."
+```
+
+(YOLOv8n 파인튜닝은 폐쇄셋 학습이라 Prompt 없음. 클래스가 학습으로 고정됨)
+
+채점 코드는 `eval/zeroshot/`, 인식 파이프라인 구현은
 `isaac_ext/roboe_block_stacking/perception/` 에 있음.
 
 ## 직접 실행하기 (inference 재현)
