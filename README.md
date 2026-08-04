@@ -23,15 +23,21 @@ Isaac Sim 5.1 위에서, 고정된 **ZED-X RGB-D 카메라**와 **AI 검출 모�
 같은 파이프라인에서 **인식 소스만 바꿔** 두 배치를 각 10회씩 돌린 성공률
 (랜덤 배치는 같은 seed = 4개 소스가 **동일한 10개 배치**로 평가됨):
 
-| 인식 소스 | 기본 배치 | 랜덤 배치 | 대표 영상* |
-| --- | :---: | :---: | :---: |
-| **YOLOv8n 파인튜닝** ✅ 기본 | **10/10** | **10/10** | [▶ 보기](media/demo/demo_random.gif) |
-| Grounding DINO (tiny) | **10/10** | 4/10 | [▶ 보기](media/demo/infer_gdino.gif) |
-| Qwen2.5-VL-3B | **10/10** | **10/10** | [▶ 보기](media/demo/infer_qwen.gif) |
-| YOLO-World v2 (s) | 6/10 | 7/10 | [▶ 보기](media/demo/infer_yoloworld.gif) |
+| 인식 소스 | 기본 배치 | 랜덤 배치 |
+| --- | :---: | :---: |
+| **YOLOv8n 파인튜닝** ✅ 기본 | **10/10** | **10/10** |
+| Grounding DINO (tiny) | **10/10** | 4/10 |
+| Qwen2.5-VL-3B | **10/10** | **10/10** |
+| YOLO-World v2 (s) | 6/10 | 7/10 |
 
-(\*) 4편 모두 **같은 랜덤 배치**에서 해당 소스가 실제 완주한 회차의 ZED 카메라 영상
-(검출 박스 오버레이 포함) — 소스 간 직접 비교 가능.
+**인식 소스별 대표 영상** — 4편 모두 **같은 랜덤 배치**에서 해당 소스가 실제 완주한
+회차 (ZED 카메라 시점 + 검출 오버레이) — 소스 간 직접 비교 가능:
+
+| YOLOv8n 파인튜닝 (10/10 · 10/10) | Grounding DINO (10/10 · 4/10) |
+| :---: | :---: |
+| [![YOLOv8n 파인튜닝](media/demo/demo_random.gif)](media/demo/demo_random.mp4) | [![Grounding DINO](media/demo/infer_gdino.gif)](media/demo/infer_gdino.mp4) |
+| **Qwen2.5-VL-3B (10/10 · 10/10)** | **YOLO-World v2 (6/10 · 7/10)** |
+| [![Qwen2.5-VL](media/demo/infer_qwen.gif)](media/demo/infer_qwen.mp4) | [![YOLO-World](media/demo/infer_yoloworld.gif)](media/demo/infer_yoloworld.mp4) |
 
 - 실패 13회는 전부 "특정 큐브 재검출 실패 → 정체 → 타임아웃(100초)". **완성된 탑이
   무너진 사례는 0회** — 오검출은 브리지 안전장치가 걸러냄 (Qwen 은 회당 최대 45회 기각)
