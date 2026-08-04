@@ -69,6 +69,14 @@ def main():
     mine = CubeDetector(str(OUT_TS), CLASS_NAMES, imgsz=IMGSZ, conf=CONF, iou=0.5)
 
     images = sorted((REPO / "data" / "cubes" / "images" / "val").glob("*.jpg"))[:8]
+    if not images:
+        # 클린 체크아웃에는 data/ 가 없다 (gitignore - 재생성: sdg/generate_dataset.py).
+        # parity 비교는 생략하되 "로드 + 추론이 되는가"는 확인하고 성공으로 마친다.
+        _ = mine(np.zeros((720, 1280, 3), dtype=np.uint8))
+        print("[export] data/ 에 val 이미지가 없어 parity 비교 생략 "
+              "(재생성: sdg/generate_dataset.py). 로드·추론 스모크는 통과.")
+        print("EXPORT_YOLOWORLD: PASS (parity skipped)")
+        return
     total_ref = total_mine = matched = cls_mismatch = 0
     ious = []
     for path in images:
@@ -112,6 +120,10 @@ def main():
               f"IoU 평균 {np.mean(ious):.5f} 최소 {np.min(ious):.5f}, 클래스 불일치 {cls_mismatch}")
     ok = total_ref > 0 and total_ref == total_mine == matched and cls_mismatch == 0
     print(f"EXPORT_YOLOWORLD: {'PASS' if ok else 'FAIL'}")
+    if not ok:
+        # setup_zeroshot.sh 가 "실패 시 여기서 멈춘다"를 지키려면 exit 코드가 올라가야 한다
+        # (클린룸 검증에서 FAIL 인데도 [OK] 로 끝나는 것을 실측 - 그 처방)
+        sys.exit(1)
 
 
 main()
